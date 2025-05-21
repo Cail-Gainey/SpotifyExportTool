@@ -524,13 +524,13 @@ class SettingsView(QWidget):
         log_text_layout.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         
         # 日志设置标题
-        self.log_title = QLabel(self.language_manager.get_text("settings.log.title", "日志设置"))
+        self.log_title = QLabel(self.language_manager.get_text("settings.log.title"))
         self.log_title.setFont(QFont("PingFang SC", 16, QFont.Bold))
         self.log_title.setStyleSheet("color: white;")
         log_text_layout.addWidget(self.log_title)
         
         # 日志设置描述
-        self.log_desc = QLabel(self.language_manager.get_text("settings.log.desc", "设置日志记录的详细程度和查看日志文件"))
+        self.log_desc = QLabel(self.language_manager.get_text("settings.log.desc"))
         self.log_desc.setStyleSheet("color: #b3b3b3; font-size: 13px;")
         self.log_desc.setWordWrap(True)
         log_text_layout.addWidget(self.log_desc)
@@ -550,16 +550,16 @@ class SettingsView(QWidget):
         log_level_layout.setSpacing(10)  # 增加间距
         
         # 日志级别标签
-        self.log_level_label = QLabel(self.language_manager.get_text("settings.log.level", "日志级别:"))
+        self.log_level_label = QLabel(self.language_manager.get_text("settings.log.level_label"))
         self.log_level_label.setStyleSheet("color: white; font-size: 14px;")
         log_level_layout.addWidget(self.log_level_label)
         
         # 日志级别下拉框
         self.log_level_combo = QComboBox()
-        self.log_level_combo.addItem(self.language_manager.get_text("settings.log.level.debug", "调试"), "debug")
-        self.log_level_combo.addItem(self.language_manager.get_text("settings.log.level.info", "信息"), "info")
-        self.log_level_combo.addItem(self.language_manager.get_text("settings.log.level.warning", "警告"), "warning")
-        self.log_level_combo.addItem(self.language_manager.get_text("settings.log.level.error", "错误"), "error")
+        self.log_level_combo.addItem(self.language_manager.get_text("settings.log.level_text.debug"), "debug")
+        self.log_level_combo.addItem(self.language_manager.get_text("settings.log.level_text.info"), "info")
+        self.log_level_combo.addItem(self.language_manager.get_text("settings.log.level_text.warning"), "warning")
+        self.log_level_combo.addItem(self.language_manager.get_text("settings.log.level_text.error"), "error")
         self.log_level_combo.setMinimumWidth(120)  # 减小最小宽度
         self.log_level_combo.setFixedHeight(40)
         self.log_level_combo.setStyleSheet("""
@@ -658,7 +658,7 @@ class SettingsView(QWidget):
         log_level_layout.addWidget(self.log_level_combo)
         
         # 查看日志按钮
-        self.view_log_btn = QPushButton(self.language_manager.get_text("settings.log.view_btn", "查看日志"))
+        self.view_log_btn = QPushButton(self.language_manager.get_text("settings.log.view_btn"))
         self.view_log_btn.setFixedSize(120, 40)
         self.view_log_btn.setStyleSheet("""
             QPushButton {
@@ -925,20 +925,20 @@ class SettingsView(QWidget):
             
             # 更新日志部分文本
             if hasattr(self, 'log_title') and self.log_title:
-                self.log_title.setText(self.language_manager.get_text("settings.log.title", "日志设置"))
+                self.log_title.setText(self.language_manager.get_text("settings.log.title"))
                 
             if hasattr(self, 'log_desc') and self.log_desc:
-                self.log_desc.setText(self.language_manager.get_text("settings.log.desc", "设置日志记录的详细程度和查看日志文件"))
+                self.log_desc.setText(self.language_manager.get_text("settings.log.desc"))
                 
             if hasattr(self, 'log_level_label') and self.log_level_label:
-                self.log_level_label.setText(self.language_manager.get_text("settings.log.level", "日志级别:"))
+                self.log_level_label.setText(self.language_manager.get_text("settings.log.level_label"))
                 
             if hasattr(self, 'log_level_combo') and self.log_level_combo:
                 self.log_level_combo.blockSignals(True)
-                self.log_level_combo.setItemText(0, self.language_manager.get_text("settings.log.level.debug", "调试"))
-                self.log_level_combo.setItemText(1, self.language_manager.get_text("settings.log.level.info", "信息"))
-                self.log_level_combo.setItemText(2, self.language_manager.get_text("settings.log.level.warning", "警告"))
-                self.log_level_combo.setItemText(3, self.language_manager.get_text("settings.log.level.error", "错误"))
+                self.log_level_combo.setItemText(0, self.language_manager.get_text("settings.log.level_text.debug"))
+                self.log_level_combo.setItemText(1, self.language_manager.get_text("settings.log.level_text.info"))
+                self.log_level_combo.setItemText(2, self.language_manager.get_text("settings.log.level_text.warning"))
+                self.log_level_combo.setItemText(3, self.language_manager.get_text("settings.log.level_text.error"))
                 
                 # 恢复当前选项
                 current_level = settings.get_setting("log_level", "info")
@@ -948,7 +948,7 @@ class SettingsView(QWidget):
                 self.log_level_combo.blockSignals(False)
                 
             if hasattr(self, 'view_log_btn') and self.view_log_btn:
-                self.view_log_btn.setText(self.language_manager.get_text("settings.log.view_btn", "查看日志"))
+                self.view_log_btn.setText(self.language_manager.get_text("settings.log.view_btn"))
             
         except Exception as e:
             print(f"更新UI文本失败: {str(e)}")
@@ -1052,8 +1052,8 @@ class SettingsView(QWidget):
                 logger.error(f"设置日志级别失败: {str(e)}")
                 QMessageBox.warning(
                     self,
-                    self.language_manager.get_text("common.error", "错误"),
-                    self.language_manager.get_text("settings.log.level_error", "设置日志级别失败: {0}").format(str(e))
+                    self.language_manager.get_text("common.error"),
+                    self.language_manager.get_text("settings.log.level_error").format(str(e))
                 )
     
     def view_log(self):
@@ -1068,8 +1068,8 @@ class SettingsView(QWidget):
             if not os.path.exists(log_path):
                 QMessageBox.information(
                     self,
-                    self.language_manager.get_text("common.info", "提示"),
-                    self.language_manager.get_text("settings.log.not_found", "日志文件不存在")
+                    self.language_manager.get_text("common.info"),
+                    self.language_manager.get_text("settings.log.not_found")
                 )
                 return
                 
@@ -1088,6 +1088,6 @@ class SettingsView(QWidget):
             logger.error(f"打开日志文件失败: {str(e)}")
             QMessageBox.warning(
                 self,
-                self.language_manager.get_text("common.error", "错误"),
-                self.language_manager.get_text("settings.log.open_error", "打开日志文件失败: {0}").format(str(e))
+                self.language_manager.get_text("common.error"),
+                self.language_manager.get_text("settings.log.open_error").format(str(e))
             )

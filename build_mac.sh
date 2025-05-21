@@ -12,8 +12,8 @@ rm -rf dist/mac/dmg_build
 mkdir -p dist/mac # 确保dist/mac目录存在
 
 # 检查app_icon.png是否存在 (背景图和图标仍需)
-if [ ! -f src/assets/app_icon.png ]; then
-  echo "错误: src/assets/app_icon.png 不存在!"
+if [ ! -f assets/app_icon.png ]; then
+  echo "错误: assets/app_icon.png 不存在!"
   exit 1
 fi
 
@@ -29,25 +29,25 @@ fi
 echo "正在创建DMG背景图像..."
 python3 src/tools/create_dmg_background.py
 
-# 创建src/assets/app_icon.icns (Mac图标)
+# 创建assets/app_icon.icns (Mac图标)
 echo "正在创建Mac图标文件..."
 ICONDIR="build/mac/AppIcon.iconset"
 mkdir -p "$ICONDIR"
 
 # 生成不同尺寸的图标
-sips -z 16 16     src/assets/app_icon.png --out "$ICONDIR/icon_16x16.png"
-sips -z 32 32     src/assets/app_icon.png --out "$ICONDIR/icon_16x16@2x.png"
-sips -z 32 32     src/assets/app_icon.png --out "$ICONDIR/icon_32x32.png"
-sips -z 64 64     src/assets/app_icon.png --out "$ICONDIR/icon_32x32@2x.png"
-sips -z 128 128   src/assets/app_icon.png --out "$ICONDIR/icon_128x128.png"
-sips -z 256 256   src/assets/app_icon.png --out "$ICONDIR/icon_128x128@2x.png"
-sips -z 256 256   src/assets/app_icon.png --out "$ICONDIR/icon_256x256.png"
-sips -z 512 512   src/assets/app_icon.png --out "$ICONDIR/icon_256x256@2x.png"
-sips -z 512 512   src/assets/app_icon.png --out "$ICONDIR/icon_512x512.png"
-sips -z 1024 1024 src/assets/app_icon.png --out "$ICONDIR/icon_512x512@2x.png"
+sips -z 16 16     assets/app_icon.png --out "$ICONDIR/icon_16x16.png"
+sips -z 32 32     assets/app_icon.png --out "$ICONDIR/icon_16x16@2x.png"
+sips -z 32 32     assets/app_icon.png --out "$ICONDIR/icon_32x32.png"
+sips -z 64 64     assets/app_icon.png --out "$ICONDIR/icon_32x32@2x.png"
+sips -z 128 128   assets/app_icon.png --out "$ICONDIR/icon_128x128.png"
+sips -z 256 256   assets/app_icon.png --out "$ICONDIR/icon_128x128@2x.png"
+sips -z 256 256   assets/app_icon.png --out "$ICONDIR/icon_256x256.png"
+sips -z 512 512   assets/app_icon.png --out "$ICONDIR/icon_256x256@2x.png"
+sips -z 512 512   assets/app_icon.png --out "$ICONDIR/icon_512x512.png"
+sips -z 1024 1024 assets/app_icon.png --out "$ICONDIR/icon_512x512@2x.png"
 
 # 转换为.icns格式
-iconutil -c icns -o "src/assets/app_icon.icns" "$ICONDIR"
+iconutil -c icns -o "assets/app_icon.icns" "$ICONDIR"
 
 # 清理临时目录
 rm -rf "$ICONDIR"
@@ -62,29 +62,60 @@ if [ $? -eq 0 ]; then
     # 确保资源文件被正确复制
     echo "确保资源文件被正确复制..."
     
-    # 确保应用程序包中的资源目录存在
+    # 确保应用程序包中的必要目录存在
+    MACOS_DIR="$APP_PATH/Contents/MacOS"
     RESOURCES_DIR="$APP_PATH/Contents/Resources"
-    mkdir -p "$RESOURCES_DIR"
     
-    # 复制图标文件到根目录和资源目录
-    echo "复制图标文件到资源目录..."
-    cp src/assets/app_icon.png "$APP_PATH/Contents/MacOS/"
-    cp src/assets/app_icon.icns "$RESOURCES_DIR/"
+    # 创建所有必要的目录
+    mkdir -p "$MACOS_DIR/assets"
+    mkdir -p "$MACOS_DIR/config"
+    mkdir -p "$MACOS_DIR/data"
+    mkdir -p "$MACOS_DIR/log"
+    mkdir -p "$MACOS_DIR/cache/images/avatars"
+    mkdir -p "$MACOS_DIR/cache/images/playlists"
+    mkdir -p "$MACOS_DIR/cache/images/tracks"
+    mkdir -p "$MACOS_DIR/locale"
+    mkdir -p "$MACOS_DIR/src/ui"
+    mkdir -p "$MACOS_DIR/src/utils"
     
-    # 复制SVG图标文件
-    echo "复制SVG图标文件..."
-    cp src/assets/*.svg "$APP_PATH/Contents/MacOS/"
+    # 复制图标文件
+    echo "复制图标文件..."
+    cp assets/app_icon.png "$MACOS_DIR/assets/"
+    cp assets/app_icon.icns "$RESOURCES_DIR/"
     
-    # 确保assets目录存在
-    mkdir -p "$APP_PATH/Contents/MacOS/assets"
+    # 复制所有资源文件
+    echo "复制所有资源文件..."
+    cp -r assets/* "$MACOS_DIR/assets/"
     
-    # 复制所有资源文件到assets目录
-    echo "复制所有资源文件到assets目录..."
-    cp src/assets/*.* "$APP_PATH/Contents/MacOS/assets/"
+    # 复制语言文件
+    echo "复制语言文件..."
+    cp -r locale/*.json "$MACOS_DIR/locale/"
+    
+    # 复制配置文件
+    echo "复制配置文件..."
+    cp -r src/config/* "$MACOS_DIR/config/"
+    
+    # 复制UI和工具文件
+    echo "复制UI和工具文件..."
+    cp -r src/ui/* "$MACOS_DIR/src/ui/"
+    cp -r src/utils/* "$MACOS_DIR/src/utils/"
+    
+    # 创建空的占位文件
+    echo "创建占位文件..."
+    touch "$MACOS_DIR/log/.keep"
+    touch "$MACOS_DIR/data/.keep"
+    touch "$MACOS_DIR/cache/.keep"
+    touch "$MACOS_DIR/cache/images/avatars/.keep"
+    touch "$MACOS_DIR/cache/images/playlists/.keep"
+    touch "$MACOS_DIR/cache/images/tracks/.keep"
+    
+    # 设置正确的权限
+    echo "设置文件权限..."
+    chmod -R 755 "$APP_PATH"
     
     # 创建DMG镜像（添加拖拽安装功能）
     echo "正在创建DMG镜像..."
-
+    
     # 创建dmg构建目录
     DMG_DIR="dist/mac/dmg_build"
     mkdir -p "$DMG_DIR"
@@ -96,22 +127,22 @@ if [ $? -eq 0 ]; then
     ln -s /Applications "$DMG_DIR/Applications"
 
     # 如果我们已经成功创建了背景图像，则使用自定义的DMG
-    if [ -f "src/assets/dmg_background.png" ]; then
+    if [ -f "assets/dmg_background.png" ]; then
         echo "检测到DMG背景图，创建自定义DMG..."
         
         # 显示背景图信息
-        echo "背景图路径: src/assets/dmg_background.png"
-        ls -la src/assets/dmg_background.png
+        echo "背景图路径: assets/dmg_background.png"
+        ls -la assets/dmg_background.png
         
         # 创建DMG背景图像目录
         mkdir -p "$DMG_DIR/.background"
-        cp "src/assets/dmg_background.png" "$DMG_DIR/.background/background.png"
+        cp "assets/dmg_background.png" "$DMG_DIR/.background/background.png"
         echo "已将背景图复制到: $DMG_DIR/.background/background.png"
         ls -la "$DMG_DIR/.background/background.png"
         
         # 获取背景图尺寸
-        BG_WIDTH=$(sips -g pixelWidth src/assets/dmg_background.png | grep pixelWidth | awk '{print $2}')
-        BG_HEIGHT=$(sips -g pixelHeight src/assets/dmg_background.png | grep pixelHeight | awk '{print $2}')
+        BG_WIDTH=$(sips -g pixelWidth assets/dmg_background.png | grep pixelWidth | awk '{print $2}')
+        BG_HEIGHT=$(sips -g pixelHeight assets/dmg_background.png | grep pixelHeight | awk '{print $2}')
         echo "背景图尺寸: ${BG_WIDTH}x${BG_HEIGHT}"
         
         # 设置DMG窗口尺寸和位置
@@ -159,7 +190,7 @@ if [ $? -eq 0 ]; then
             if [ ! -d "$BACKGROUND_DIR" ]; then
                 echo "创建.background目录"
                 mkdir -p "$BACKGROUND_DIR"
-                cp "src/assets/dmg_background.png" "$BACKGROUND_DIR/background.png"
+                cp "assets/dmg_background.png" "$BACKGROUND_DIR/background.png"
                 echo "已复制背景图到: $BACKGROUND_DIR/background.png"
             fi
             
@@ -227,7 +258,7 @@ if [ $? -eq 0 ]; then
         rm -f "$TEMP_DMG"
         
         echo "DMG创建完成，总结:"
-        echo "- 背景图: src/assets/dmg_background.png (${BG_WIDTH}x${BG_HEIGHT})"
+        echo "- 背景图: assets/dmg_background.png (${BG_WIDTH}x${BG_HEIGHT})"
         echo "- 最终DMG: $FINAL_DMG"
         ls -la "$FINAL_DMG"
     else

@@ -119,7 +119,7 @@ def set_level(level):
     """设置日志级别
     :param level: 日志级别，可以是'debug', 'info', 'warning', 'error', 'critical'
     """
-    global CURRENT_LOG_LEVEL
+    global CURRENT_LOG_LEVEL, CONSOLE_HANDLER_ID, FILE_HANDLER_ID
     
     if level.lower() in LOG_LEVELS:
         # 更新当前日志级别
@@ -134,42 +134,31 @@ def set_level(level):
             pass
         
         try:
-            # 移除并重新添加控制台处理器
+            # 移除旧的处理器
             if CONSOLE_HANDLER_ID is not None:
-                try:
-                    loguru_logger.remove(CONSOLE_HANDLER_ID)
-                except:
-                    pass
-                
-                # 重新添加控制台处理器，使用新的日志级别
-                loguru_logger.add(
-                    sys.stdout,
-                    level=LOG_LEVELS[level.lower()],
-                    format=console_format,
-                    colorize=True
-                )
-            
-            # 移除并重新添加主文件处理器
+                loguru_logger.remove(CONSOLE_HANDLER_ID)
             if FILE_HANDLER_ID is not None:
-                try:
-                    loguru_logger.remove(FILE_HANDLER_ID)
-                except:
-                    pass
-                
-                # 确保日志目录存在
-                os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
-                
-                # 重新添加文件处理器，使用新的日志级别
-                loguru_logger.add(
-                    LOG_FILE,
-                    level=LOG_LEVELS[level.lower()],
-                    format=file_format,
-                    rotation="5 MB", 
-                    retention="10 days",
-                    compression="zip",
-                    encoding="utf-8",
-                    mode="a"  # 追加模式
-                )
+                loguru_logger.remove(FILE_HANDLER_ID)
+            
+            # 添加新的控制台处理器
+            CONSOLE_HANDLER_ID = loguru_logger.add(
+                sys.stdout,
+                level=LOG_LEVELS[level.lower()],
+                format=console_format,
+                colorize=True
+            )
+            
+            # 添加新的文件处理器
+            FILE_HANDLER_ID = loguru_logger.add(
+                LOG_FILE,
+                level=LOG_LEVELS[level.lower()],
+                format=file_format,
+                rotation="5 MB",
+                retention="10 days",
+                compression="zip",
+                encoding="utf-8",
+                mode="a"  # 使用追加模式
+            )
             
             loguru_logger.info(f"Log level set to {level.upper()}")
             return True
@@ -177,7 +166,6 @@ def set_level(level):
             try:
                 loguru_logger.warning(f"Failed to set log level: {str(e)}")
             except:
-                loguru_logger.error(f"Failed to set log level: {str(e)}")
                 print(f"Failed to set log level: {str(e)}")
             return False
     else:

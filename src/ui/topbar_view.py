@@ -9,12 +9,13 @@ from PyQt5.QtCore import Qt, pyqtSignal, QThread, QSize, QPoint, QTimer, QEvent
 import requests
 from io import BytesIO
 import os
+import sys
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import webbrowser
-from utils.language_manager import LanguageManager
-from utils.cache_manager import CacheManager
-from utils.logger import logger
+from src.utils.language_manager import LanguageManager
+from src.utils.cache_manager import CacheManager
+from src.utils.logger import logger
 
 class ImageLoader(QThread):
     """图像加载线程"""
@@ -102,6 +103,40 @@ class TopbarView(QWidget):
         if hasattr(self, 'logout_action'):
             self.logout_action.setText(self.language_manager.get_text('topbar.menu.logout', '退出'))
 
+    def get_resource_path(self, relative_path):
+        """
+        获取资源文件的绝对路径，适用于开发环境和打包环境
+        
+        :param relative_path: 相对路径或文件名
+        :return: 资源文件的绝对路径
+        """
+        try:
+            # 如果在打包环境中，基础路径会有所不同
+            if getattr(sys, 'frozen', False):
+                # 在打包环境中，使用应用程序所在目录
+                base_path = os.path.dirname(sys.executable)
+                
+                # 然后尝试在assets目录查找
+                assets_path = os.path.join(base_path, "assets", relative_path)
+                if os.path.exists(assets_path):
+                    return assets_path
+
+            else:
+                # 在开发环境中，使用项目根目录
+                base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                
+                # 尝试在src/assets目录查找
+                src_assets_path = os.path.join(base_path, "assets", relative_path)
+                if os.path.exists(src_assets_path):
+                    return src_assets_path
+                    
+                # 如果找不到，返回默认路径
+                return src_assets_path
+        except Exception as e:
+            logger.error(f"获取资源路径失败: {str(e)}")
+            # 如果出错，返回相对路径
+            return relative_path
+
     def init_ui(self):
         """初始化UI"""
         logger.info("初始化TopbarView UI")
@@ -171,7 +206,7 @@ class TopbarView(QWidget):
         
         # 应用Logo图标
         app_logo = QLabel()
-        logo_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'app_icon.png')
+        logo_path = self.get_resource_path('app_icon.png')
         if os.path.exists(logo_path):
             logo_pixmap = QPixmap(logo_path)
             # 将Logo缩放到合适的尺寸
@@ -184,7 +219,12 @@ class TopbarView(QWidget):
         
         # 首页按钮
         self.home_btn = QToolButton()
-        self.home_btn.setIcon(QIcon(os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'home.svg')))
+        home_icon_path = self.get_resource_path('home.svg')
+        if os.path.exists(home_icon_path):
+            self.home_btn.setIcon(QIcon(home_icon_path))
+        else:
+            logger.warning(f"找不到首页图标: {home_icon_path}")
+            self.home_btn.setText("🏠")
         self.home_btn.setIconSize(QSize(24, 24))
         self.home_btn.setFixedSize(40, 40)
         self.home_btn.setToolTip(self.language_manager.get_text('topbar.home', '主页'))
@@ -538,7 +578,14 @@ class TopbarView(QWidget):
         
         try:
             # 删除token文件
-            token_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data', 'token.json')
+            if getattr(sys, 'frozen', False):
+                # 如果是打包后的可执行文件
+                base_dir = os.path.dirname(sys.executable)
+            else:
+                # 如果是直接运行脚本
+                base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                
+            token_path = os.path.join(base_dir, 'data', 'token.json')
             logger.debug(f"准备删除token文件: {token_path}")
             if os.path.exists(token_path):
                 os.remove(token_path)
@@ -550,7 +597,7 @@ class TopbarView(QWidget):
             main_window = self.window()
             
             # 导入在这里，以避免循环导入
-            from login import LoginWindow
+            from src.ui.login import LoginWindow
             
             # 创建登录窗口
             logger.info("创建登录窗口")

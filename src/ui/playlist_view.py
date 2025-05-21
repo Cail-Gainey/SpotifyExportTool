@@ -14,10 +14,10 @@ import requests
 from io import BytesIO
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-from utils.cache_manager import CacheManager
-from utils.language_manager import LanguageManager
-from utils.loading_indicator import LoadingIndicator
-from utils.logger import logger
+from src.utils.cache_manager import CacheManager
+from src.utils.language_manager import LanguageManager
+from src.utils.loading_indicator import LoadingIndicator
+from src.utils.logger import logger
 
 class SongLoader(QThread):
     """歌曲加载线程"""
@@ -92,7 +92,7 @@ class ImageLoader(QThread):
     def run(self):
         try:
             # 输出详细日志，帮助调试
-            print(f"正在加载图片: {self.url} 类型: {'playlist' if self.track_id == 'playlist_cover' else 'track'}")
+            logger.debug(f"正在加载图片: {self.url} 类型: {'playlist' if self.track_id == 'playlist_cover' else 'track'}")
             
             # 确定图片类型
             image_type = 'playlist' if self.track_id == 'playlist_cover' else 'track'
@@ -100,46 +100,72 @@ class ImageLoader(QThread):
             # 首先尝试从缓存加载
             cached_image = self.cache_manager.get_cached_image(self.url, image_type)
             if cached_image and not cached_image.isNull():
-                print(f"图片已从缓存加载: {self.url}")
+                logger.debug(f"图片已从缓存加载: {self.url}")
                 self.image_loaded.emit(cached_image, self.track_id)
                 return
             
             # 如果没有缓存，从网络加载
-            print(f"从网络加载图片: {self.url}")
+            logger.debug(f"从网络加载图片: {self.url}")
+            
+            # 检查URL是否有效
+            if not self.url or not self.url.startswith('http'):
+                logger.error(f"无效的图片URL: {self.url}")
+                # 创建一个空图片作为替代
+                empty_image = QImage(100, 100, QImage.Format_ARGB32)
+                empty_image.fill(Qt.transparent)
+                self.image_loaded.emit(empty_image, self.track_id)
+                return
+                
+            # 创建会话并设置重试机制
             session = requests.Session()
             retries = Retry(total=3, backoff_factor=0.5)
             session.mount('https://', HTTPAdapter(max_retries=retries))
             
+            # 设置超时时间
             response = session.get(self.url, timeout=10)
             response.raise_for_status()
             
             # 加载图片
             img_data = BytesIO(response.content)
             image = QImage()
-            image.loadFromData(img_data.getvalue())
+            load_success = image.loadFromData(img_data.getvalue())
             
             # 检查图片是否有效
-            if image.isNull():
-                print(f"加载的图片无效: {self.url}")
+            if not load_success or image.isNull():
+                logger.debug(f"加载的图片无效: {self.url}")
+                # 创建一个空图片作为替代
+                empty_image = QImage(100, 100, QImage.Format_ARGB32)
+                empty_image.fill(Qt.transparent)
+                self.image_loaded.emit(empty_image, self.track_id)
                 return
                 
-            print(f"图片加载成功: {self.url}, 大小: {image.width()}x{image.height()}")
+            logger.debug(f"图片加载成功: {self.url}, 大小: {image.width()}x{image.height()}")
             
             # 缓存图片
             try:
                 self.cache_manager.cache_image(self.url, image, image_type)
-                print(f"图片已缓存: {self.url}")
+                logger.debug(f"图片已缓存: {self.url}")
             except Exception as cache_err:
-                print(f"缓存图片失败: {str(cache_err)}")
+                logger.error(f"缓存图片失败: {str(cache_err)}")
                 # 缓存失败不影响继续使用图片
             
             # 发送信号
             self.image_loaded.emit(image, self.track_id)
             
+        except requests.exceptions.RequestException as req_err:
+            logger.error(f"网络请求错误: {self.url} - {str(req_err)}")
+            # 创建一个空图片作为替代
+            empty_image = QImage(100, 100, QImage.Format_ARGB32)
+            empty_image.fill(Qt.transparent)
+            self.image_loaded.emit(empty_image, self.track_id)
         except Exception as e:
             import traceback
-            print(f"加载图片失败: {self.url} - {str(e)}")
-            print(traceback.format_exc())  # 打印更详细的错误信息
+            logger.error(f"加载图片失败: {self.url} - {str(e)}")
+            logger.error(traceback.format_exc())  # 打印更详细的错误信息
+            # 创建一个空图片作为替代
+            empty_image = QImage(100, 100, QImage.Format_ARGB32)
+            empty_image.fill(Qt.transparent)
+            self.image_loaded.emit(empty_image, self.track_id)
 
 class PlaylistView(QWidget):
     def __init__(self, sp, playlist, parent=None, language_manager=None, cache_manager=None):
@@ -764,7 +790,7 @@ class PlaylistView(QWidget):
                 self.playlist_image.setText(self.get_text('playlist.no_image', '无封面'))
                 
         except Exception as e:
-            print(f"加载播放列表信息失败: {str(e)}")
+            logger.error(f"加载播放列表信息失败: {str(e)}")
             self.playlist_name = self.get_text('playlist.unknown_playlist', '未知播放列表')
             self.playlist_description = ''
             self.playlist_owner = self.get_text('playlist.unknown_owner', '未知创建者')
@@ -779,11 +805,11 @@ class PlaylistView(QWidget):
         """封面加载完成回调"""
         try:
             # 详细日志输出
-            print(f"封面加载完成: {url}")
+            logger.debug(f"封面加载完成: {url}")
             
             # 检查图片是否有效
             if image is None or image.isNull():
-                print(f"封面图片无效: {url}")
+                logger.debug(f"封面图片无效: {url}")
                 self.playlist_image.setText(self.get_text('playlist.load_failed', "加载失败"))
                 self.playlist_image.setStyleSheet("""
                     background-color: #333;
@@ -795,7 +821,7 @@ class PlaylistView(QWidget):
                 return
                 
             # 图片有效，继续处理
-            print(f"封面图片有效，大小: {image.width()}x{image.height()}")
+            logger.debug(f"封面图片有效，大小: {image.width()}x{image.height()}")
             
             # 保持矩形封面，不再创建圆形封面
             target_size = 192
@@ -804,23 +830,23 @@ class PlaylistView(QWidget):
             # 缓存封面
             try:
                 self.cache_manager.cache_image(url, scaled_image, 'playlist')
-                print(f"封面图片已缓存: {url}")
+                logger.debug(f"封面图片已缓存: {url}")
             except Exception as cache_err:
-                print(f"缓存封面图片失败: {str(cache_err)}")
+                logger.error(f"缓存封面图片失败: {str(cache_err)}")
                 # 缓存失败不影响继续使用图片
             
             # 设置封面图片
             pixmap = QPixmap.fromImage(scaled_image)
             if not pixmap.isNull():
                 self.playlist_image.setPixmap(pixmap)
-                print(f"封面图片已设置到UI, 大小: {pixmap.width()}x{pixmap.height()}")
+                logger.debug(f"封面图片已设置到UI, 大小: {pixmap.width()}x{pixmap.height()}")
             else:
-                print(f"从QImage创建QPixmap失败")
+                logger.debug(f"从QImage创建QPixmap失败")
                 self.playlist_image.setText(self.get_text('playlist.load_failed', "加载失败"))
         except Exception as e:
             import traceback
-            print(f"设置封面图片时出错: {str(e)}")
-            print(traceback.format_exc())
+            logger.error(f"设置封面图片时出错: {str(e)}")
+            logger.error(traceback.format_exc())
             self.playlist_image.setText(self.get_text('playlist.load_failed', "加载失败"))
 
     def paintEvent(self, event):
@@ -1118,7 +1144,7 @@ class PlaylistView(QWidget):
                             }
                             selected_tracks.append(track_info)
                 except Exception as e:
-                    print(f"处理歌曲数据时出错: {str(e)}")
+                    logger.error(f"处理歌曲数据时出错: {str(e)}")
                     continue
 
             # 如果有选中的歌曲，写入文件
@@ -1307,7 +1333,7 @@ class PlaylistView(QWidget):
                 return f"{name} - {artists}" if artists else name
             
         except Exception as e:
-            print(f"格式化歌曲名称时出错: {str(e)}")
+            logger.error(f"格式化歌曲名称时出错: {str(e)}")
             # 发生错误时返回歌曲名称或空字符串
             if isinstance(track_info, dict) and 'name' in track_info:
                 return track_info['name']
@@ -1752,41 +1778,41 @@ class PlaylistView(QWidget):
         """
         try:
             # 详细日志
-            print(f"歌曲封面加载完成: track_id={track_id}")
+            logger.debug(f"歌曲封面加载完成: track_id={track_id}")
             
             # 检查图片是否有效
             if not image or image.isNull():
-                print(f"歌曲封面无效: track_id={track_id}")
+                logger.debug(f"歌曲封面无效: track_id={track_id}")
                 return
             
             # 查找对应的图片容器
             artwork_container = self.findChild(QLabel, f"artwork_{track_id}")
             if not artwork_container:
-                print(f"找不到图片容器: artwork_{track_id}")
+                logger.debug(f"找不到图片容器: artwork_{track_id}")
                 return
                 
             # 缩放图片并设置 - 使用固定大小
             try:
                 pixmap = QPixmap.fromImage(image)
                 if pixmap.isNull():
-                    print(f"创建QPixmap失败: track_id={track_id}")
+                    logger.debug(f"创建QPixmap失败: track_id={track_id}")
                     artwork_container.setText("🎵")
                     return
                     
                 # 始终缩放为50x50，不受窗口大小影响
                 scaled_pixmap = pixmap.scaled(50, 50, Qt.KeepAspectRatio, Qt.SmoothTransformation)
                 artwork_container.setPixmap(scaled_pixmap)
-                print(f"设置歌曲封面成功: track_id={track_id}")
+                logger.debug(f"设置歌曲封面成功: track_id={track_id}")
             except Exception as pixmap_err:
-                print(f"处理图片时出错: {str(pixmap_err)}")
+                logger.error(f"处理图片时出错: {str(pixmap_err)}")
                 artwork_container.setText("🎵")
                 
             # 确保画面尺寸始终保持固定
             artwork_container.setFixedSize(50, 50)
         except Exception as e:
             import traceback
-            print(f"处理歌曲封面时出错: {str(e)}")
-            print(traceback.format_exc())
+            logger.error(f"处理歌曲封面时出错: {str(e)}")
+            logger.error(traceback.format_exc())
 
     def create_song_list(self):
         """创建歌曲列表，支持自适应布局"""
@@ -2229,31 +2255,57 @@ class PlaylistView(QWidget):
         :param image_id: 图片标识符
         :param image: 加载的图片
         """
-        if image_id != 'playlist_cover' or not hasattr(self, 'playlist_image'):
-            return
+        try:
+            if image_id != 'playlist_cover' or not hasattr(self, 'playlist_image'):
+                logger.debug(f"忽略非播放列表封面图片或播放列表图片标签不存在: {image_id}")
+                return
+                
+            # 确保图片有效
+            if image.isNull():
+                logger.warning(f"播放列表封面图片无效")
+                self.playlist_image.setText(self.get_text('playlist.load_failed', "加载失败"))
+                self.playlist_image.setStyleSheet("""
+                    background-color: #333;
+                    color: white;
+                    font-size: 14px;
+                    border-radius: 4px;
+                    text-align: center;
+                """)
+                return
             
-        # 确保图片有效
-        if image.isNull():
-            self.playlist_image.setText(self.get_text('playlist.load_failed', "加载失败"))
-            self.playlist_image.setStyleSheet("""
-                background-color: #333;
-                color: white;
-                font-size: 14px;
-                border-radius: 4px;
-                text-align: center;
-            """)
-        else:
-            # 缓存图片
-            self.cache_manager.cache_image(self.playlist_image_url, image, 'playlist')
-            
-            # 缩放图片并设置
-            scaled_image = image.scaled(192, 192, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            self.playlist_image.setPixmap(QPixmap.fromImage(scaled_image))
-            
-        # 停止加载动画
-        if hasattr(self, 'playlist_image_loading'):
-            self.playlist_image_loading.stop()
-            self.playlist_image_loading.hide() 
+            try:
+                # 缓存图片
+                if self.playlist_image_url:
+                    self.cache_manager.cache_image(self.playlist_image_url, image, 'playlist')
+                    logger.debug(f"播放列表封面图片已缓存: {self.playlist_image_url}")
+                
+                # 缩放图片并设置
+                scaled_image = image.scaled(192, 192, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                pixmap = QPixmap.fromImage(scaled_image)
+                
+                if pixmap.isNull():
+                    logger.warning("无法从图片创建像素图")
+                    self.playlist_image.setText(self.get_text('playlist.load_failed', "加载失败"))
+                    return
+                    
+                self.playlist_image.setPixmap(pixmap)
+                logger.debug("播放列表封面图片设置成功")
+            except Exception as e:
+                logger.error(f"处理播放列表封面图片时出错: {str(e)}")
+                self.playlist_image.setText(self.get_text('playlist.load_failed', "加载失败"))
+                
+            # 停止加载动画
+            if hasattr(self, 'playlist_image_loading'):
+                self.playlist_image_loading.stop()
+                self.playlist_image_loading.hide() 
+        except Exception as e:
+            import traceback
+            logger.error(f"播放列表封面图片加载回调出错: {str(e)}")
+            logger.error(traceback.format_exc())
+            try:
+                self.playlist_image.setText(self.get_text('playlist.load_failed', "加载失败"))
+            except:
+                pass
 
     def update_ui(self):
         """更新UI状态"""

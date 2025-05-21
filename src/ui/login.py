@@ -9,6 +9,7 @@ import http.server
 import socketserver
 import urllib.parse
 from datetime import datetime
+import sys
 
 from PyQt5.QtWidgets import (QMainWindow, QLabel, QPushButton, QVBoxLayout, 
                            QWidget, QDesktopWidget, QApplication)
@@ -16,12 +17,24 @@ from PyQt5.QtGui import QFont, QPixmap, QIcon
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QSettings
 
 from spotipy.oauth2 import SpotifyOAuth
-import config.config as config
-from utils.language_manager import LanguageManager
-from utils.logger import logger
+from src.config import config as config
+from src.utils.language_manager import LanguageManager
+from src.utils.logger import logger
 
-# 获取程序运行目录
+# 获取当前文件所在目录
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# 获取项目根目录
+if getattr(sys, 'frozen', False):
+    # 如果是打包后的可执行文件
+    ROOT_DIR = os.path.dirname(sys.executable)
+else:
+    # 如果是直接运行脚本
+    ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# 缓存目录
+CACHE_DIR = os.path.join(ROOT_DIR, 'data')
+os.makedirs(CACHE_DIR, exist_ok=True)
 
 sp_oauth = SpotifyOAuth(
     client_id=config.CLIENT_ID,
@@ -35,7 +48,6 @@ authorized = False
 server_active = False  # 跟踪服务器状态
 
 # Token文件路径
-CACHE_DIR = os.path.join(BASE_DIR, 'data')
 TOKEN_PATH = os.path.join(CACHE_DIR, 'token.json')
 
 # 全局变量用于保存窗口实例，防止被垃圾回收
@@ -261,52 +273,21 @@ class LoginWindow(QMainWindow):
     def setup_ui(self):
         """设置UI"""
         # 设置窗口属性
-        self.setWindowTitle("SpotifyExportTool")
-        icon_path = os.path.join(BASE_DIR, "assets", "app_icon.png")
+        self.setWindowTitle("SpotifyExportTool - 登录")
+        self.setFixedSize(400, 500)  # 固定窗口大小
+        self.setStyleSheet("background-color: #040404; color: white;")
+        
+        # 设置窗口图标
+        icon_path = os.path.join(ROOT_DIR, "assets", "app_icon.png")
+        
+            
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
-            
-        # 设置窗口大小
-        self.resize(500, 400)
+        else:
+            logger.warning(f"窗口图标不存在: {icon_path}")
         
         # 居中显示窗口
         self.center_window()
-        
-        # 设置窗口样式
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #121212;
-            }
-            QLabel {
-                color: #FFFFFF;
-            }
-            QPushButton {
-                background-color: #1DB954;
-                color: #FFFFFF;
-                border: none;
-                border-radius: 20px;
-                padding: 10px 20px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #1ED760;
-            }
-            QPushButton:pressed {
-                background-color: #1AA34A;
-            }
-            QPushButton:disabled {
-                background-color: #535353;
-            }
-            /* 强制覆盖可能的白色背景 */
-            QComboBox QAbstractItemView, QComboBoxPrivateContainer {
-                background-color: #282828;
-                color: white;
-                border: none;
-                outline: none;
-                padding: 0px;
-                margin: 0px;
-            }
-        """)
         
         # 创建中心部件
         central_widget = QWidget()
@@ -318,15 +299,16 @@ class LoginWindow(QMainWindow):
         layout.setSpacing(20)
         layout.setContentsMargins(40, 40, 40, 40)
         
-        # 应用Logo图标
-        logo_image = QLabel()
-        logo_path = os.path.join(BASE_DIR, 'assets', 'app_icon.png')
+        # 添加Logo
+        logo_path = os.path.join(ROOT_DIR, 'assets', 'app_icon.png')
+       
         if os.path.exists(logo_path):
+            logo_label = QLabel()
             logo_pixmap = QPixmap(logo_path)
-            logo_pixmap = logo_pixmap.scaled(120, 120, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            logo_image.setPixmap(logo_pixmap)
-            logo_image.setAlignment(Qt.AlignCenter)
-            layout.addWidget(logo_image)
+            logo_pixmap = logo_pixmap.scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            logo_label.setPixmap(logo_pixmap)
+            logo_label.setAlignment(Qt.AlignCenter)
+            layout.addWidget(logo_label)
         else:
             logger.warning(f"Logo图标不存在: {logo_path}")
         
@@ -468,7 +450,7 @@ class LoginWindow(QMainWindow):
         try:
             logger.info("准备打开主窗口")
             global __main_window
-            from home import HomePage
+            from src.ui.home import HomePage
             token_info = load_token()
             if token_info:
                 logger.info("Token有效，创建主窗口")

@@ -3,9 +3,11 @@
 """
 import os
 import json
+import sys
 import locale
 from PyQt5.QtCore import QObject, pyqtSignal
-from config import settings
+from src.config import settings
+
 
 class LanguageManager(QObject):
     """语言管理器类"""
@@ -30,7 +32,12 @@ class LanguageManager(QObject):
         self._initialized = True
         
         # 获取程序运行目录
-        self.base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        if getattr(sys, 'frozen', False):
+            # 如果是打包后的可执行文件
+            self.base_dir = os.path.dirname(sys.executable)
+        else:
+            # 如果是直接运行脚本
+            self.base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         
         # 语言文件目录
         self.locale_dir = os.path.join(self.base_dir, 'locale')
@@ -56,12 +63,27 @@ class LanguageManager(QObject):
     def _load_translations(self):
         """加载所有支持的语言翻译"""
         for lang in self.supported_languages:
-            file_path = os.path.join(self.locale_dir, f'{lang}.json')
-            try:
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    self.translations[lang] = json.load(f)
-            except Exception as e:
-                print(f"加载语言文件失败 {lang}: {str(e)}")
+            # 尝试多个可能的路径
+            file_paths = [
+                os.path.join(self.locale_dir, f'{lang}.json'),  # 标准路径
+                os.path.join(self.base_dir, 'locale', f'{lang}.json'),  # 根目录下的locale
+                os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'locale', f'{lang}.json')  # 相对于当前文件的路径
+            ]
+            
+            loaded = False
+            for file_path in file_paths:
+                try:
+                    if os.path.exists(file_path):
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            self.translations[lang] = json.load(f)
+                            print(f"成功加载语言文件: {file_path}")
+                            loaded = True
+                            break
+                except Exception as e:
+                    print(f"尝试加载语言文件失败 {lang} 从 {file_path}: {str(e)}")
+            
+            if not loaded:
+                print(f"无法加载语言文件 {lang}，尝试了以下路径: {file_paths}")
                 # 如果加载失败，使用空字典
                 self.translations[lang] = {}
     

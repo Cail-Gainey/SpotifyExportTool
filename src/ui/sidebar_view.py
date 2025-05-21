@@ -13,8 +13,8 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QPixmap, QImage, QIcon
 from PyQt5.QtCore import Qt, pyqtSignal, QThread, QSize, QPropertyAnimation, QEasingCurve
 
-from utils.language_manager import LanguageManager
-from utils.logger import logger
+from src.utils.language_manager import LanguageManager
+from src.utils.logger import logger
 
 class ImageLoader(QThread):
     """图片加载线程"""
@@ -76,7 +76,20 @@ class PlaylistItem(QWidget):
         # 播放列表图标（默认图标）
         self.icon_label = QLabel()
         self.icon_label.setFixedSize(QSize(40, 40))
-        default_icon = QPixmap(os.path.join("assets", "app_icon.png"))
+        
+        # 使用父级的get_resource_path方法获取图标路径
+        parent_view = self.parent()
+        while parent_view and not hasattr(parent_view, 'get_resource_path'):
+            parent_view = parent_view.parent()
+            
+        if parent_view and hasattr(parent_view, 'get_resource_path'):
+            icon_path = parent_view.get_resource_path("app_icon.png")
+        else:
+            # 回退方案：直接使用相对路径
+            icon_path = os.path.join("src", "assets", "app_icon.png")
+            
+        default_icon = QPixmap(icon_path)
+        
         if not default_icon.isNull():
             self.icon_label.setPixmap(default_icon.scaled(40, 40, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         else:
@@ -240,6 +253,40 @@ class SidebarView(QWidget):
         # 更新UI文本
         self.update_ui_texts()
         
+    def get_resource_path(self, relative_path):
+        """
+        获取资源文件的绝对路径，适用于开发环境和打包环境
+        
+        :param relative_path: 相对路径或文件名
+        :return: 资源文件的绝对路径
+        """
+        try:
+            # 如果在打包环境中，基础路径会有所不同
+            if getattr(sys, 'frozen', False):
+                # 在打包环境中，使用应用程序所在目录
+                base_path = os.path.dirname(sys.executable)
+
+                # 然后尝试在assets目录查找
+                assets_path = os.path.join(base_path, "assets", relative_path)
+                if os.path.exists(assets_path):
+                    return assets_path
+                    
+            else:
+                # 在开发环境中，使用项目根目录
+                base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                
+                # 尝试在src/assets目录查找
+                src_assets_path = os.path.join(base_path, "assets", relative_path)
+                if os.path.exists(src_assets_path):
+                    return src_assets_path
+                    
+                # 如果找不到，返回默认路径
+                return src_assets_path
+        except Exception as e:
+            logger.error(f"获取资源路径失败: {str(e)}")
+            # 如果出错，返回相对路径
+            return relative_path
+        
     def init_ui(self):
         """初始化UI"""
         self.main_layout = QVBoxLayout(self)
@@ -303,11 +350,12 @@ class SidebarView(QWidget):
         
         # 为折叠状态创建一个专用的按钮
         self.collapsed_button = QPushButton()
-        icon_path = self.get_resource_path(os.path.join("assets", "collapse.svg"))
+        icon_path = self.get_resource_path("collapse.svg")
         if os.path.exists(icon_path):
             self.collapsed_button.setIcon(QIcon(icon_path))
         else:
             self.collapsed_button.setIcon(QIcon())
+            logger.warning(f"警告: 找不到图标文件 {icon_path}")
         self.collapsed_button.setFixedSize(QSize(30, 30))
         self.collapsed_button.setStyleSheet("""
             QPushButton {
@@ -635,11 +683,11 @@ class SidebarView(QWidget):
         if self.is_collapsed:
             # 折叠状态 - 准备UI
             # 使用展开图标
-            icon_path = self.get_resource_path(os.path.join("assets", "expand.svg"))
+            icon_path = self.get_resource_path("expand.svg")
             if os.path.exists(icon_path):
                 self.collapsed_button.setIcon(QIcon(icon_path))
             else:
-                print(f"警告: 找不到图标文件 {icon_path}")
+                logger.warning(f"警告: 找不到图标文件 {icon_path}")
                 
             # 创建并准备折叠状态下的图标按钮（如果尚未创建）
             if not self.cached_icon_buttons:
@@ -649,7 +697,7 @@ class SidebarView(QWidget):
         else:
             # 展开状态
             # 使用折叠图标
-            icon_path = self.get_resource_path(os.path.join("assets", "collapse.svg"))
+            icon_path = self.get_resource_path("collapse.svg")
             if os.path.exists(icon_path):
                 self.toggle_button.setIcon(QIcon(icon_path))
         
@@ -887,24 +935,3 @@ class SidebarView(QWidget):
                     
                     # 缓存按钮以便后续使用
                     self.cached_icon_buttons.append(icon_button)
-
-    def get_resource_path(self, relative_path):
-        """
-        获取资源文件的绝对路径，适用于开发环境和打包环境
-        
-        :param relative_path: 相对于应用根目录的路径
-        :return: 资源文件的绝对路径
-        """
-        # 如果在打包环境中，基础路径会有所不同
-        if getattr(sys, 'frozen', False):
-            # 在打包环境中，_MEIPASS变量由PyInstaller提供
-            if hasattr(sys, '_MEIPASS'):
-                base_path = sys._MEIPASS
-            else:
-                # 否则使用应用程序所在目录
-                base_path = os.path.dirname(sys.executable)
-        else:
-            # 在开发环境中，使用当前目录
-            base_path = os.path.abspath(".")
-        
-        return os.path.join(base_path, relative_path)

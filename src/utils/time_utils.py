@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from utils.language_manager import LanguageManager
+from src.utils.language_manager import LanguageManager
 
 class TimeUtils:
     @staticmethod

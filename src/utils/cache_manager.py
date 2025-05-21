@@ -7,6 +7,9 @@ import sys
 from datetime import datetime, timedelta
 from PyQt5.QtGui import QImage
 import hashlib
+import logging
+
+logger = logging.getLogger(__name__)
 
 class CacheManager:
     """缓存管理器"""
@@ -16,7 +19,7 @@ class CacheManager:
         base_dir = self.get_base_dir()
         
         # 缓存目录
-        self.cache_dir = os.path.join(base_dir, 'cache')
+        self.cache_dir = os.path.join(base_dir, 'cache')  # 现在cache与data同级
         self.playlists_cache_file = os.path.join(self.cache_dir, 'playlists.json')
         self.tracks_cache_dir = os.path.join(self.cache_dir, 'tracks')
         self.images_cache_dir = os.path.join(self.cache_dir, 'images')
@@ -60,20 +63,18 @@ class CacheManager:
         try:
             # 检查是否在PyInstaller环境中
             if getattr(sys, 'frozen', False):
-                # 在PyInstaller中，使用_MEIPASS或可执行文件所在目录
-                if hasattr(sys, '_MEIPASS'):
-                    base_path = sys._MEIPASS
-                else:
-                    base_path = os.path.dirname(sys.executable)
+                # 在PyInstaller中，使用可执行文件所在目录
+                base_path = os.path.dirname(sys.executable)
             else:
-                # 在开发环境中，使用当前脚本所在目录的父目录
-                base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                # 在开发环境中，使用项目根目录（不是src目录）
+                # 从src/utils向上三级到达项目根目录
+                base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
             
             # 打印出基础目录，便于调试
-            print(f"缓存管理器基础目录: {base_path}")
+            logger.info(f"缓存管理器基础目录: {base_path}")
             return base_path
         except Exception as e:
-            print(f"获取基础目录失败: {str(e)}")
+            logger.error(f"获取基础目录失败: {str(e)}")
             # 如果出错，回退到当前目录
             return os.path.abspath(".")
     
@@ -106,7 +107,7 @@ class CacheManager:
             return cache_data['playlists']
             
         except Exception as e:
-            print(f"读取歌单缓存失败: {str(e)}")
+            logger.error(f"读取歌单缓存失败: {str(e)}")
             self.cache_status['playlists']['error'] = str(e)
             return None
     
@@ -158,7 +159,7 @@ class CacheManager:
             self.cache_status['playlists']['error'] = None
                 
         except Exception as e:
-            print(f"保存歌单缓存失败: {str(e)}")
+            logger.error(f"保存歌单缓存失败: {str(e)}")
             self.cache_status['playlists']['error'] = str(e)
     
     def get_cached_image(self, url, image_type='playlist'):
@@ -196,7 +197,7 @@ class CacheManager:
             return None
             
         except Exception as e:
-            print(f"读取图片缓存失败: {str(e)}")
+            logger.error(f"读取图片缓存失败: {str(e)}")
             if url not in self.cache_status['images'][image_type + 's']:
                 self.cache_status['images'][image_type + 's'][url] = {}
             self.cache_status['images'][image_type + 's'][url]['error'] = str(e)
@@ -227,7 +228,7 @@ class CacheManager:
             self.cache_status['images'][image_type + 's'][url]['error'] = None
                 
         except Exception as e:
-            print(f"保存图片缓存失败: {str(e)}")
+            logger.error(f"保存图片缓存失败: {str(e)}")
             if url not in self.cache_status['images'][image_type + 's']:
                 self.cache_status['images'][image_type + 's'][url] = {}
             self.cache_status['images'][image_type + 's'][url]['error'] = str(e)
@@ -275,7 +276,7 @@ class CacheManager:
             return cache_data['tracks']
             
         except Exception as e:
-            print(f"读取歌曲缓存失败: {str(e)}")
+            logger.error(f"读取歌曲缓存失败: {str(e)}")
             if playlist_id not in self.cache_status['tracks']:
                 self.cache_status['tracks'][playlist_id] = {}
             self.cache_status['tracks'][playlist_id]['error'] = str(e)
@@ -328,7 +329,7 @@ class CacheManager:
             self.cache_status['tracks'][playlist_id]['error'] = None
                 
         except Exception as e:
-            print(f"保存歌曲缓存失败: {str(e)}")
+            logger.error(f"保存歌曲缓存失败: {str(e)}")
             if playlist_id not in self.cache_status['tracks']:
                 self.cache_status['tracks'][playlist_id] = {}
             self.cache_status['tracks'][playlist_id]['error'] = str(e)
@@ -378,7 +379,7 @@ class CacheManager:
             return None
             
         except Exception as e:
-            print(f"获取缓存时间戳失败: {str(e)}")
+            logger.error(f"获取缓存时间戳失败: {str(e)}")
             return None
     
     def clear_expired_cache(self):
@@ -416,7 +417,7 @@ class CacheManager:
                     os.remove(file_path)
                     
         except Exception as e:
-            print(f"清理缓存失败: {str(e)}")
+            logger.error(f"清理缓存失败: {str(e)}")
     
     def clear_all_cache(self):
         """清理所有缓存"""
@@ -446,7 +447,7 @@ class CacheManager:
             }
                 
         except Exception as e:
-            print(f"清理所有缓存失败: {str(e)}")
+            logger.error(f"清理所有缓存失败: {str(e)}")
     
     def get_cache_status(self):
         """

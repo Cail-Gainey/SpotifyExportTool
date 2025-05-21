@@ -8,17 +8,18 @@ from PyQt5.QtCore import Qt, QTimer
 import os
 from PyQt5.QtGui import QIcon, QResizeEvent
 import spotipy
+import sys
 
-from views.welcome_view import WelcomeView
-from views.playlist_view import PlaylistView
-from views.sidebar_view import SidebarView
-from views.topbar_view import TopbarView
-from views.settings_view import SettingsView
-from views.error_view import ErrorView
-from views.loading_view import LoadingView
-from utils.language_manager import LanguageManager
-from utils.cache_manager import CacheManager
-from utils.logger import logger
+from src.ui.welcome_view import WelcomeView
+from src.ui.playlist_view import PlaylistView
+from src.ui.sidebar_view import SidebarView
+from src.ui.topbar_view import TopbarView
+from src.ui.settings_view import SettingsView
+from src.ui.error_view import ErrorView
+from src.ui.loading_view import LoadingView
+from src.utils.language_manager import LanguageManager
+from src.utils.cache_manager import CacheManager
+from src.utils.logger import logger
 
 class HomePage(QMainWindow):
     """主页"""
@@ -87,9 +88,12 @@ class HomePage(QMainWindow):
             logger.info("开始初始化HomePage布局")
             # 设置窗口属性
             self.setWindowTitle("SpotifyExportTool")
-            icon_path = os.path.join("assets", "app_icon.png")
+            # 获取正确的图标路径
+            icon_path = self.get_resource_path("app_icon.png")
+            
             if os.path.exists(icon_path):
                 self.setWindowIcon(QIcon(icon_path))
+                logger.info(f"设置应用图标: {icon_path}")
             else:
                 logger.warning(f"应用图标不存在: {icon_path}")
                 
@@ -180,6 +184,39 @@ class HomePage(QMainWindow):
             traceback.print_exc()
             raise
     
+    def get_resource_path(self, relative_path):
+        """
+        获取资源文件的绝对路径，适用于开发环境和打包环境
+        
+        :param relative_path: 相对路径或文件名
+        :return: 资源文件的绝对路径
+        """
+        try:
+            # 如果在打包环境中，基础路径会有所不同
+            if getattr(sys, 'frozen', False):
+                # 在打包环境中，使用应用程序所在目录
+                base_path = os.path.dirname(sys.executable)
+                                    
+                # 然后尝试在assets目录查找
+                assets_path = os.path.join(base_path, "assets", relative_path)
+                if os.path.exists(assets_path):
+                    return assets_path
+            else:
+                # 在开发环境中，使用项目根目录
+                base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                
+                # 尝试在src/assets目录查找
+                src_assets_path = os.path.join(base_path, "assets", relative_path)
+                if os.path.exists(src_assets_path):
+                    return src_assets_path
+                    
+                # 如果找不到，返回默认路径
+                return src_assets_path
+        except Exception as e:
+            logger.error(f"获取资源路径失败: {str(e)}")
+            # 如果出错，返回相对路径
+            return relative_path
+    
     def show_home(self):
         """显示欢迎页面"""
         # 清除之前的内容
@@ -201,12 +238,12 @@ class HomePage(QMainWindow):
         """登出并返回登录界面"""
         try:
             # 删除token文件
-            token_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'token.json')
+            token_path = os.path.join(self.base_dir, 'data', 'token.json')
             if os.path.exists(token_path):
                 os.remove(token_path)
             
             # 导入登录模块（在需要时导入，避免循环导入）
-            from login import LoginWindow
+            from src.ui.login import LoginWindow
             
             # 创建登录窗口
             self.login_window = LoginWindow()

@@ -2,16 +2,17 @@
 设置页面视图
 """
 from PyQt5.QtWidgets import (QWidget, QLabel, QPushButton, QVBoxLayout, 
-                           QHBoxLayout, QFrame, QMessageBox, QComboBox, QRadioButton, QButtonGroup)
+                           QHBoxLayout, QFrame, QMessageBox, QComboBox, QRadioButton, QButtonGroup, QScrollArea)
 from PyQt5.QtGui import QFont
 from PyQt5.QtCore import Qt
-from utils.cache_manager import CacheManager
-from utils.language_manager import LanguageManager
-from utils.logger import logger
+from src.utils.cache_manager import CacheManager
+from src.utils.language_manager import LanguageManager
+from src.utils.logger import logger
 import os
 from PyQt5.QtCore import QSettings, QEvent
 from PyQt5.QtWidgets import QApplication
 from PyQt5.QtCore import QTimer
+from src.config import settings
 
 class SettingsView(QWidget):
     def __init__(self, parent=None):
@@ -55,10 +56,47 @@ class SettingsView(QWidget):
         # 设置背景颜色
         self.setStyleSheet("background-color: #040404;")
         
-        # 创建主布局
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(40, 40, 40, 40)
-        main_layout.setSpacing(30)
+        # 创建外层布局
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout.setSpacing(0)
+        
+        # 创建滚动区域
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.NoFrame)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setStyleSheet("""
+            QScrollArea {
+                background-color: #040404;
+                border: none;
+            }
+            QScrollBar:vertical {
+                background-color: #121212;
+                width: 10px;
+                margin: 0px;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #535353;
+                min-height: 20px;
+                border-radius: 5px;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                height: 0px;
+            }
+            QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
+                background: none;
+            }
+        """)
+        
+        # 创建内容容器
+        content_widget = QWidget()
+        content_widget.setStyleSheet("background-color: #040404;")
+        
+        # 创建内容布局
+        main_layout = QVBoxLayout(content_widget)
+        main_layout.setContentsMargins(30, 30, 30, 30)  # 减小边距
+        main_layout.setSpacing(25)  # 减小间距
         
         # 设置标题
         self.title_label = QLabel(self.language_manager.get_text("settings.title"))
@@ -103,7 +141,7 @@ class SettingsView(QWidget):
         self.language_combo = QComboBox()
         self.language_combo.addItem(self.language_manager.get_text("settings.language.zh_CN"), "zh_CN")
         self.language_combo.addItem(self.language_manager.get_text("settings.language.en_US"), "en_US")
-        self.language_combo.setMinimumWidth(250)
+        self.language_combo.setMinimumWidth(180)  # 减小最小宽度
         self.language_combo.setFixedHeight(40)
         self.language_combo.setStyleSheet("""
             QComboBox {
@@ -189,14 +227,20 @@ class SettingsView(QWidget):
             }
         """)
         
-        # 连接信号
-        self.language_combo.currentIndexChanged.connect(self.on_language_changed)
+        # 先阻止信号触发，避免初始化时自动切换语言
+        self.language_combo.blockSignals(True)
         
         # 设置当前语言
         current_lang = self.language_manager.current_language
         index = self.language_combo.findData(current_lang)
         if index >= 0:
             self.language_combo.setCurrentIndex(index)
+            
+        # 连接信号
+        self.language_combo.currentIndexChanged.connect(self.on_language_changed)
+        
+        # 恢复信号
+        self.language_combo.blockSignals(False)
         
         lang_control_layout.addWidget(self.language_combo)
         language_layout.addWidget(lang_control_area)
@@ -231,7 +275,7 @@ class SettingsView(QWidget):
         self.export_desc.setWordWrap(True)
         export_text_layout.addWidget(self.export_desc)
         
-        export_layout.addWidget(export_text_area, 1)  # 左侧占更多空间
+        export_layout.addWidget(export_text_area, 3)  # 左侧占比减少
         
         # 右侧控制区域
         export_control_area = QWidget()
@@ -251,7 +295,7 @@ class SettingsView(QWidget):
         self.export_format_combo.addItem(self.language_manager.get_text('playlist.format_artist_name', '歌手-歌名'), "artists-name")
         self.export_format_combo.addItem(self.language_manager.get_text('playlist.format_name_artist_album', '歌名-歌手-专辑'), "name-artists-album")
         
-        self.export_format_combo.setMinimumWidth(200)
+        self.export_format_combo.setMinimumWidth(180)  # 减小最小宽度
         self.export_format_combo.setFixedHeight(40)
         self.export_format_combo.setStyleSheet("""
             QComboBox {
@@ -359,8 +403,8 @@ class SettingsView(QWidget):
         # 创建两个单选按钮
         file_format_container = QWidget()
         file_format_layout = QHBoxLayout(file_format_container)
-        file_format_layout.setContentsMargins(0, 0, 0, 0)
-        file_format_layout.setSpacing(20)
+        file_format_layout.setContentsMargins(0, 5, 0, 0)  # 增加顶部边距
+        file_format_layout.setSpacing(15)  # 减小间距
         
         self.txt_radio = QRadioButton(self.language_manager.get_text("settings.export.txt_format", "文本文件 (.txt)"))
         self.txt_radio.setStyleSheet("color: white; font-size: 14px;")
@@ -435,7 +479,7 @@ class SettingsView(QWidget):
         self.cache_size_label.setStyleSheet("color: #b3b3b3; font-size: 13px; margin-top: 10px;")
         cache_text_layout.addWidget(self.cache_size_label)
         
-        cache_layout.addWidget(cache_text_area, 1)  # 左侧占更多空间
+        cache_layout.addWidget(cache_text_area, 3)  # 左侧占比减少
         
         # 右侧控制区域
         cache_control_area = QWidget()
@@ -491,7 +535,7 @@ class SettingsView(QWidget):
         self.log_desc.setWordWrap(True)
         log_text_layout.addWidget(self.log_desc)
         
-        log_layout.addWidget(log_text_area, 1)  # 左侧占更多空间
+        log_layout.addWidget(log_text_area, 3)  # 左侧占比减少
         
         # 右侧控制区域
         log_control_area = QWidget()
@@ -503,6 +547,7 @@ class SettingsView(QWidget):
         log_level_container = QWidget()
         log_level_layout = QHBoxLayout(log_level_container)
         log_level_layout.setContentsMargins(0, 0, 0, 0)
+        log_level_layout.setSpacing(10)  # 增加间距
         
         # 日志级别标签
         self.log_level_label = QLabel(self.language_manager.get_text("settings.log.level", "日志级别:"))
@@ -515,7 +560,7 @@ class SettingsView(QWidget):
         self.log_level_combo.addItem(self.language_manager.get_text("settings.log.level.info", "信息"), "info")
         self.log_level_combo.addItem(self.language_manager.get_text("settings.log.level.warning", "警告"), "warning")
         self.log_level_combo.addItem(self.language_manager.get_text("settings.log.level.error", "错误"), "error")
-        self.log_level_combo.setMinimumWidth(150)
+        self.log_level_combo.setMinimumWidth(120)  # 减小最小宽度
         self.log_level_combo.setFixedHeight(40)
         self.log_level_combo.setStyleSheet("""
             QComboBox {
@@ -605,8 +650,7 @@ class SettingsView(QWidget):
         self.log_level_combo.currentIndexChanged.connect(self.on_log_level_changed)
         
         # 设置当前日志级别
-        settings = QSettings()
-        current_log_level = settings.value("log/level", "info")
+        current_log_level = settings.get_setting("log_level", "info")
         index = self.log_level_combo.findData(current_log_level)
         if index >= 0:
             self.log_level_combo.setCurrentIndex(index)
@@ -644,6 +688,12 @@ class SettingsView(QWidget):
         
         # 应用特殊设置确保下拉框没有空白
         self._apply_combo_box_fixes()
+        
+        # 设置滚动区域的内容
+        scroll_area.setWidget(content_widget)
+        
+        # 将滚动区域添加到外层布局
+        outer_layout.addWidget(scroll_area)
     
     def _apply_combo_box_fixes(self):
         """应用ComboBox特殊修复，解决下拉框空白问题"""
@@ -709,7 +759,7 @@ class SettingsView(QWidget):
             QApplication.instance().setStyleSheet(QApplication.instance().styleSheet() + additional_style)
             
             # 为所有ComboBox应用设置
-            for combo_box in [self.language_combo, self.export_format_combo]:
+            for combo_box in [self.language_combo, self.export_format_combo, self.log_level_combo]:
                 if combo_box:
                     # 安装事件过滤器捕获弹出事件
                     combo_box.installEventFilter(self)
@@ -734,7 +784,12 @@ class SettingsView(QWidget):
     
     def eventFilter(self, obj, event):
         """事件过滤器，用于处理ComboBox弹出事件"""
-        if event.type() == QEvent.Show and (obj == self.language_combo or obj == self.export_format_combo):
+        # 阻止鼠标滚轮事件改变下拉框选项
+        if event.type() == QEvent.Wheel and isinstance(obj, QComboBox):
+            # 拦截滚轮事件，防止滚动改变选项
+            return True
+            
+        if event.type() == QEvent.Show and isinstance(obj, QComboBox):
             # 当下拉框显示时调整其视图
             popup = obj.view()
             if popup:
@@ -886,7 +941,7 @@ class SettingsView(QWidget):
                 self.log_level_combo.setItemText(3, self.language_manager.get_text("settings.log.level.error", "错误"))
                 
                 # 恢复当前选项
-                current_level = QSettings().value("log/level", "info")
+                current_level = settings.get_setting("log_level", "info")
                 index = self.log_level_combo.findData(current_level)
                 if index >= 0:
                     self.log_level_combo.setCurrentIndex(index)
@@ -981,9 +1036,12 @@ class SettingsView(QWidget):
         if log_level:
             try:
                 logger.info(f"设置日志级别为: {log_level}")
-                # 保存设置
-                settings = QSettings()
-                settings.setValue("log/level", log_level)
+                # 保存设置到user_settings.json
+                settings.set_setting("log_level", log_level)
+                
+                # 同时也保存到QSettings以保持兼容性
+                qt_settings = QSettings()
+                qt_settings.setValue("log/level", log_level)
                 
                 # 更新日志级别
                 if logger.set_level(log_level):

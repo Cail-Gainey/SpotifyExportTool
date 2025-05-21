@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import QSplashScreen, QProgressBar, QLabel, QVBoxLayout, QW
 from PyQt5.QtGui import QFont, QPainter, QColor, QPixmap
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QDateTime
 import os
-from utils.logger import logger
+from src.utils.logger import logger
 
 class SplashWindow(QSplashScreen):
     # 添加完成信号
@@ -25,7 +25,7 @@ class SplashWindow(QSplashScreen):
         
         # 添加Logo图标
         logo_label = QLabel()
-        logo_pixmap = QPixmap(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'app_icon.png'))
+        logo_pixmap = QPixmap(os.path.join(os.path.dirname(os.path.abspath(__file__)), '../../assets', 'app_icon.png'))
         logo_pixmap = logo_pixmap.scaled(120, 120, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         logo_label.setPixmap(logo_pixmap)
         logo_label.setAlignment(Qt.AlignCenter)

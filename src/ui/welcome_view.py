@@ -5,8 +5,8 @@ from PyQt5.QtWidgets import (QWidget, QLabel, QVBoxLayout, QScrollArea, QSizePol
 from PyQt5.QtGui import QFont, QPixmap
 from PyQt5.QtCore import Qt
 from datetime import datetime
-from utils.language_manager import LanguageManager
-from utils.logger import logger
+from src.utils.language_manager import LanguageManager
+from src.utils.logger import logger
 import os
 
 class WelcomeView(QWidget):

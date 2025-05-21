@@ -4,27 +4,57 @@
 import sys
 import os
 import json
-from PyQt5.QtWidgets import QApplication, QDesktopWidget
+import traceback
+from PyQt5.QtWidgets import QApplication, QDesktopWidget, QMessageBox
 from PyQt5.QtCore import QSettings
-from login import load_token, LoginWindow
-from home import HomePage
-from utils.logger import logger
+from src.ui.login import load_token, LoginWindow
+from src.ui.home import HomePage
+from src.utils.logger import logger
+from src.config import settings as settings_module
 
 # 设置 QSettings
 APP_NAME = "SpotifyExportTool"
 ORGANIZATION_NAME = "SpotifyExport"
 
 # 获取程序运行目录
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-SETTINGS_PATH = os.path.join(BASE_DIR, 'config', 'settings.json')
+if getattr(sys, 'frozen', False):
+    # 如果是打包后的可执行文件
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    # 如果是直接运行脚本
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# 确保配置目录存在
+CONFIG_DIR = os.path.join(BASE_DIR, 'config')
+os.makedirs(CONFIG_DIR, exist_ok=True)
+
+SETTINGS_PATH = os.path.join(CONFIG_DIR, 'settings.json')
+
+# 确保日志目录存在
+LOG_DIR = os.path.join(BASE_DIR, 'log')
+os.makedirs(LOG_DIR, exist_ok=True)
+
+def display_error_message(error_message):
+    """显示错误对话框"""
+    msg_box = QMessageBox()
+    msg_box.setIcon(QMessageBox.Critical)
+    msg_box.setWindowTitle("运行错误")
+    msg_box.setText("程序遇到错误并需要关闭")
+    msg_box.setDetailedText(error_message)
+    msg_box.setStandardButtons(QMessageBox.Ok)
+    msg_box.exec_()
 
 def check_auth_status():
     """
     检查token有效性
     :return: 如果token有效返回token信息，否则返回None
     """
-    token_info = load_token()
-    return token_info
+    try:
+        token_info = load_token()
+        return token_info
+    except Exception as e:
+        logger.error(f"检查认证状态失败: {str(e)}")
+        return None
 
 def load_settings():
     """
@@ -72,6 +102,13 @@ def save_settings(settings):
 def main():
     """主函数"""
     try:
+        # 在程序开始时记录日志路径
+        logger.info(f"程序启动，日志路径: {logger.get_log_path()}")
+        logger.info(f"错误日志路径: {logger.get_error_log_path()}")
+        logger.info(f"基础目录: {BASE_DIR}")
+        logger.info(f"Python版本: {sys.version}")
+        logger.info(f"运行模式: {'打包' if getattr(sys, 'frozen', False) else '脚本'}")
+        
         global login_window, main_window  # 将窗口实例声明为全局变量，防止被垃圾回收
         app = QApplication(sys.argv)
         
@@ -81,8 +118,7 @@ def main():
         app.setApplicationDisplayName(APP_NAME)  # 设置显示名称
         
         # 设置日志级别
-        settings = QSettings()
-        log_level = settings.value("log/level", "info")
+        log_level = settings_module.get_setting("log_level", "info")
         logger.info(f"应用程序启动，设置日志级别为: {log_level}")
         logger.set_level(log_level)
         
@@ -194,9 +230,23 @@ def main():
         
         return app.exec_()
     except Exception as e:
-        logger.error(f"程序启动失败: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        error_message = f"程序启动失败: {str(e)}\n\n详细错误信息:\n{traceback.format_exc()}"
+        logger.error(error_message)
+        
+        # 保存错误信息到文件，确保即使日志系统失败也能捕获错误
+        try:
+            with open(os.path.join(BASE_DIR, 'crash_report.txt'), 'w', encoding='utf-8') as f:
+                f.write(error_message)
+        except:
+            pass
+            
+        # 尝试显示错误对话框，如果QApplication已经初始化
+        if 'app' in locals():
+            try:
+                display_error_message(error_message)
+            except:
+                pass
+                
         return 1
 
 # 全局变量用于保存窗口实例
@@ -204,4 +254,17 @@ login_window = None
 main_window = None
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except Exception as e:
+        error_message = f"未捕获的异常: {str(e)}\n\n详细错误信息:\n{traceback.format_exc()}"
+        
+        # 保存错误信息到文件
+        try:
+            with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'crash_report.txt'), 'w', encoding='utf-8') as f:
+                f.write(error_message)
+        except:
+            pass
+            
+        print(error_message, file=sys.stderr)
+        sys.exit(1)

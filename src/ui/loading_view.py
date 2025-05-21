@@ -4,8 +4,8 @@
 from PyQt5.QtWidgets import QWidget, QLabel, QVBoxLayout, QProgressBar
 from PyQt5.QtGui import QFont
 from PyQt5.QtCore import Qt, QTimer
-from utils.language_manager import LanguageManager
-from utils.logger import logger
+from src.utils.language_manager import LanguageManager
+from src.utils.logger import logger
 
 class LoadingView(QWidget):
     """加载页面视图类"""

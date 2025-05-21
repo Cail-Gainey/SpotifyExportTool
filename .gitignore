@@ -29,7 +29,6 @@ MANIFEST
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.
 *.manifest
-*.spec
 
 # Installer logs
 pip-log.txt
@@ -122,7 +121,34 @@ dmypy.json
 .idea/
 
 # SpotifyExportTool specific
-.cache
-log/
-config/settings.json
-spotify_export.spec 
+# 完全排除以下目录
+/build/
+/data/
+/dist/
+/log/
+/.cache
+/cache/
+/config/
+# 排除配置文件，但保留Python文件
+/config/user_settings.json
+/config/settings.json
+/config/*.json
+
+# 排除令牌文件
+**/token.json
+**/token_info.json
+
+# 排除崩溃报告
+crash_report.txt
+
+# 排除临时文件
+*.tmp
+*.bak
+*.swp
+*~.nib
+*.pyc
+
+# 排除系统文件
+Thumbs.db
+ehthumbs.db
+Desktop.ini 

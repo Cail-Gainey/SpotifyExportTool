@@ -3,9 +3,15 @@
 """
 import os
 import json
+import sys
 
 # 获取程序运行目录
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if getattr(sys, 'frozen', False):
+    # 如果是打包后的可执行文件
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    # 如果是直接运行脚本
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # 设置文件路径
 SETTINGS_PATH = os.path.join(BASE_DIR, 'config', 'user_settings.json')
@@ -17,7 +23,8 @@ DEFAULT_SETTINGS = {
     'window_height': 780,
     'window_x': 100,
     'window_y': 100,
-    'sidebar_collapsed': False
+    'sidebar_collapsed': False,
+    'log_level': 'info'  # 默认日志级别
 }
 
 def load_settings():

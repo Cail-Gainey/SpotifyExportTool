@@ -183,7 +183,7 @@ class LoginWindow(QMainWindow):
             global __login_window
             __login_window = self  # 将自身保存到全局变量中
 
-            logger.info("LoginWindow初始化开始")
+            logger.debug("LoginWindow初始化开始")
             super().__init__()
             
             # 初始化语言管理器
@@ -191,9 +191,9 @@ class LoginWindow(QMainWindow):
             self.language_manager = LanguageManager()
             self.language_manager.language_changed.connect(self.update_ui_texts)
             
-            logger.info("设置登录窗口UI")
+            logger.debug("设置登录窗口UI")
             self.setup_ui()
-            logger.info("更新UI文本")
+            logger.debug("更新UI文本")
             self.update_ui_texts()
             
             # 应用全局样式修复，防止白色背景
@@ -213,9 +213,8 @@ class LoginWindow(QMainWindow):
             self.main_window = None
             
             # 窗口居中显示
-            logger.info("居中显示窗口")
             self.center_window()
-            logger.info("LoginWindow初始化完成")
+            logger.debug("LoginWindow初始化完成")
         except Exception as e:
             logger.error(f"LoginWindow初始化失败: {str(e)}")
             import traceback
@@ -323,7 +322,6 @@ class LoginWindow(QMainWindow):
         layout.addSpacing(20)
         
         # 登录按钮
-        logger.info("创建登录按钮")
         self.login_button = QPushButton()
         self.login_button.setFont(QFont("PingFang SC", 14))
         self.login_button.setStyleSheet("""
@@ -378,7 +376,7 @@ class LoginWindow(QMainWindow):
         self.copyright_label.setStyleSheet("color: #535353;")
         self.copyright_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.copyright_label)
-        logger.info("UI界面设置完成")
+        logger.debug("UI界面设置完成")
     
     def update_ui_texts(self):
         """更新UI文本"""
@@ -448,23 +446,23 @@ class LoginWindow(QMainWindow):
     def open_main_window(self):
         """打开主窗口"""
         try:
-            logger.info("准备打开主窗口")
+            logger.debug("准备打开主窗口")
             global __main_window
             from src.ui.home import HomePage
             token_info = load_token()
             if token_info:
-                logger.info("Token有效，创建主窗口")
+                logger.debug("Token有效，创建主窗口")
                 self.main_window = HomePage(token_info['access_token'])
                 __main_window = self.main_window  # 将主窗口保存到全局变量中，防止被垃圾回收
                 
                 # 从QSettings中恢复窗口几何属性
-                logger.info("从设置中读取窗口几何信息")
+                logger.debug("从设置中读取窗口几何信息")
                 settings = QSettings()
                 if settings.contains("window/geometry"):
-                    logger.info("恢复窗口几何信息")
+                    logger.debug("恢复窗口几何信息")
                     self.main_window.restoreGeometry(settings.value("window/geometry"))
                 else:
-                    logger.info("使用默认窗口大小和位置")
+                    logger.debug("使用默认窗口大小和位置")
                     # 默认窗口大小
                     self.main_window.resize(1200, 780)
                     # 居中显示
@@ -474,11 +472,11 @@ class LoginWindow(QMainWindow):
                     self.main_window.move(window_x, window_y)
                 
                 # 显示主窗口
-                logger.info("显示主窗口")
+                logger.debug("显示主窗口")
                 self.main_window.show()
                 
                 # 确保退出时保存窗口几何属性
-                logger.info("连接窗口几何属性保存")
+                logger.debug("连接窗口几何属性保存")
                 try:
                     app = QApplication.instance()
                     if app:
@@ -489,7 +487,7 @@ class LoginWindow(QMainWindow):
                     logger.error(f"连接窗口几何属性保存信号失败: {str(e)}")
                 
                 # 使用定时器延迟关闭登录窗口，确保主窗口已完全显示
-                logger.info("延迟关闭登录窗口")
+                logger.debug("延迟关闭登录窗口")
                 QTimer.singleShot(1000, lambda: self.__close_login_window())
             else:
                 logger.warning("Token无效，无法打开主窗口")
@@ -509,13 +507,13 @@ class LoginWindow(QMainWindow):
     def __close_login_window(self):
         """安全关闭登录窗口"""
         try:
-            logger.info("安全关闭登录窗口")
+            logger.debug("安全关闭登录窗口")
             # 检查主窗口是否已显示
             if self.main_window and self.main_window.isVisible():
-                logger.info("主窗口已显示，关闭登录窗口")
+                logger.debug("主窗口已显示，关闭登录窗口")
                 self.close()
             else:
-                logger.info("主窗口未显示，延迟关闭登录窗口")
+                logger.debug("主窗口未显示，延迟关闭登录窗口")
                 QTimer.singleShot(500, lambda: self.__close_login_window())
         except Exception as e:
             logger.error(f"关闭登录窗口失败: {str(e)}")

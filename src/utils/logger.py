@@ -39,8 +39,8 @@ LOG_LEVELS = {
 }
 
 # 配置格式化器
-console_format = "<green>{time:YYYY-MM-DD HH:mm:ss}</green> [<level>{level}</level>] <cyan>{name}:{function}:{line}</cyan> - {message}"
-file_format = "{time:YYYY-MM-DD HH:mm:ss} [{level}] {name}:{function}:{line} - {message}"
+console_format = "<green>{time:YYYY-MM-DD HH:mm:ss}</green> [<level>{level}</level>] <cyan>{name}</cyan>:[<yellow>{line}</yellow>] - {message}"
+file_format = "{time:YYYY-MM-DD HH:mm:ss} [{level}] {name}:[{line}] - {message}"
 
 # 获取处理器ID以便后续更新
 CONSOLE_HANDLER_ID = None
@@ -88,32 +88,31 @@ except Exception as e:
     print(f"无法初始化文件日志: {str(e)}")
 
 # 添加错误日志处理器 (ERROR级别及以上，自动轮转)
-try:
-    # 确保错误日志目录存在
-    os.makedirs(os.path.dirname(ERROR_LOG_FILE), exist_ok=True)
-    
-    ERROR_HANDLER_ID = loguru_logger.add(
-        ERROR_LOG_FILE,
-        level="ERROR",
-        format=file_format,
-        rotation="1 MB",  # 当错误日志达到1MB时轮转
-        retention="30 days",  # 保留最近30天的错误日志
-        compression="zip",  # 压缩旧日志
-        encoding="utf-8",
-        mode="a",  # 使用追加模式
-        backtrace=True,  # 启用回溯
-        diagnose=True,  # 启用诊断
-        catch=True  # 捕获异常
-    )
-except Exception as e:
-    print(f"无法初始化错误日志: {str(e)}")
+def add_error_handler():
+    """按需添加错误日志处理器"""
+    global ERROR_HANDLER_ID
+    try:
+        # 确保错误日志目录存在
+        os.makedirs(os.path.dirname(ERROR_LOG_FILE), exist_ok=True)
+        
+        ERROR_HANDLER_ID = loguru_logger.add(
+            ERROR_LOG_FILE,
+            level="ERROR",
+            format=file_format,
+            rotation="1 MB",  # 当错误日志达到1MB时轮转
+            retention="30 days",  # 保留最近30天的错误日志
+            compression="zip",  # 压缩旧日志
+            encoding="utf-8",
+            mode="w",  # 使用覆盖模式，每次启动都会创建新文件
+            backtrace=True,  # 启用回溯
+            diagnose=True,  # 启用诊断
+            catch=True  # 捕获异常
+        )
+        return True
+    except Exception as e:
+        print(f"无法初始化错误日志: {str(e)}")
+        return False
 
-# 记录初始化信息
-try:
-    loguru_logger.info(f"Logger initialized, logging to {LOG_FILE}")
-    loguru_logger.info(f"Error logs will be saved to {ERROR_LOG_FILE}")
-except Exception as e:
-    print(f"无法记录初始化信息: {str(e)}")
 
 def set_level(level):
     """设置日志级别
@@ -171,7 +170,7 @@ def set_level(level):
                     mode="a"  # 追加模式
                 )
             
-            loguru_logger.info(f"Log level set to {level.upper()}")
+
             return True
         except Exception as e:
             try:
@@ -191,22 +190,27 @@ def get_current_level():
     """获取当前日志级别"""
     return CURRENT_LOG_LEVEL
 
-# 用于处理未捕获的异常
+# 修改异常处理函数
 def handle_exception(exc_type, exc_value, exc_traceback):
     """处理未捕获的异常，记录到日志"""
     if issubclass(exc_type, KeyboardInterrupt):
         # 不处理键盘中断
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
         return
+    
+    # 如果错误日志处理器未初始化，则初始化
+    if ERROR_HANDLER_ID is None:
+        add_error_handler()
         
     # 获取完整的异常信息
     tb_lines = traceback.format_exception(exc_type, exc_value, exc_traceback)
     tb_text = ''.join(tb_lines)
     
-    # 记录异常
+    # 记录异常到主日志文件和错误日志文件
     try:
+        # 使用 opt 方法记录完整的异常堆栈信息
         loguru_logger.opt(exception=(exc_type, exc_value, exc_traceback)).critical(
-            f"Uncaught exception:\n{tb_text}"
+            f"未捕获的异常:\n{tb_text}"
         )
     except Exception as e:
         print(f"无法记录未捕获的异常: {str(e)}")
@@ -254,6 +258,7 @@ class Logger:
     def error(self, message, *args, **kwargs):
         """记录ERROR级别日志"""
         try:
+            # 同时记录到主日志和错误日志
             loguru_logger.error(message, *args, **kwargs)
         except Exception as e:
             print(f"ERROR: {message}")
@@ -261,6 +266,7 @@ class Logger:
     def critical(self, message, *args, **kwargs):
         """记录CRITICAL级别日志"""
         try:
+            # 同时记录到主日志和错误日志
             loguru_logger.critical(message, *args, **kwargs)
         except Exception as e:
             print(f"CRITICAL: {message}")

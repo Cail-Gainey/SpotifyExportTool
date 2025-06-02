@@ -6,6 +6,7 @@ from PyQt5.QtGui import QFont
 from PyQt5.QtCore import Qt, QTimer
 from src.utils.language_manager import LanguageManager
 from src.utils.logger import logger
+from src.utils.loading_indicator import LoadingIndicator
 
 class LoadingView(QWidget):
     """加载页面视图类"""
@@ -45,12 +46,21 @@ class LoadingView(QWidget):
         layout.setContentsMargins(50, 50, 50, 50)
         layout.setAlignment(Qt.AlignCenter)
         
+        # 添加加载指示器
+        self.loading_indicator = LoadingIndicator(self)
+        self.loading_indicator.setFixedSize(60, 60)
+        layout.addWidget(self.loading_indicator, 0, Qt.AlignCenter)
+        
+        # 启动加载动画
+        self.loading_indicator.start()
+        
         # 加载消息
         self.message_label = QLabel(self.language_manager.get_text(self.message_key, self.default_message))
         self.message_label.setAlignment(Qt.AlignCenter)
         self.message_label.setFont(QFont("Arial", 14))
         self.message_label.setStyleSheet("""
             color: #FFFFFF;
+            margin-top: 20px;
         """)
         layout.addWidget(self.message_label)
         
@@ -58,6 +68,7 @@ class LoadingView(QWidget):
         self.progress_bar = QProgressBar(self)
         self.progress_bar.setRange(0, 0)  # 不确定进度
         self.progress_bar.setFixedHeight(4)
+        self.progress_bar.setFixedWidth(200)  # 固定宽度
         self.progress_bar.setTextVisible(False)
         self.progress_bar.setStyleSheet("""
             QProgressBar {
@@ -70,7 +81,7 @@ class LoadingView(QWidget):
                 border-radius: 2px;
             }
         """)
-        layout.addWidget(self.progress_bar)
+        layout.addWidget(self.progress_bar, 0, Qt.AlignCenter)
         
         # 设置背景色和样式
         self.setStyleSheet("""
@@ -96,4 +107,11 @@ class LoadingView(QWidget):
         :param message_key: 消息的语言键
         """
         self.message_key = message_key
-        self.update_ui_texts() 
+        self.update_ui_texts()
+        
+    def closeEvent(self, event):
+        """处理关闭事件"""
+        # 停止加载动画
+        if hasattr(self, 'loading_indicator'):
+            self.loading_indicator.stop()
+        event.accept() 

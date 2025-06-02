@@ -14,7 +14,7 @@
     },
     "topbar": {
         "home": "Home",
-        "app_name": "SpotifyExport",
+        "app_name": "SpotifyExportTool",
         "loading": "Loading...",
         "unknown_user": "Unknown User",
         "menu": {
@@ -26,7 +26,7 @@
     "sidebar": {
         "your_playlists": "Your Playlists",
         "loading": "Loading playlists...",
-        "no_playlists": "No playlists found",
+        "no_playlists": "No playlists",
         "loading_failed": "Loading failed, please check your network",
         "collapse": "Collapse Sidebar",
         "expand": "Expand Sidebar"
@@ -37,10 +37,10 @@
         "good_evening": "Good Evening",
         "welcome_msg": "Welcome to Spotify Export Tool",
         "instruction_1": "Select the playlist you want to export from the sidebar",
-        "instruction_2": "Click on a playlist to view its details",
+        "instruction_2": "Click on a playlist to view details",
         "instruction_3": "Export all songs in your playlists",
-        "connection_error": "Connection Failed",
-        "connection_error_msg": "Cannot connect to Spotify API server, please check your network connection and try again.",
+        "connection_error": "Connection Error",
+        "connection_error_msg": "Cannot connect to Spotify API server, please check your network and try again.",
         "logout": "Logout",
         "loading_failed": "Loading failed, please check your network"
     },
@@ -50,29 +50,29 @@
         "loading": "Loading songs...",
         "loading_failed": "Loading failed, please check your network",
         "play": "Play",
-        "select_export": "Select Songs to Export",
-        "cancel_select": "Cancel Selection",
+        "select_export": "Select songs to export",
+        "cancel_select": "Cancel all",
         "select_all": "Select All",
-        "select_all_songs": "Select All Songs",
+        "select_all_songs": "Select all songs",
         "clear": "Clear",
-        "clear_selection": "Clear Selection",
+        "clear_selection": "Clear all",
         "export_button": "Export",
-        "export_selected": "Export Selected",
+        "export_selected": "Export selected songs",
         "export_confirm": "Confirm Export",
-        "select_dir": "Select Export Directory",
+        "select_dir": "Select save directory",
         "no_selection": "Please select at least one song",
         "export_format": "Export Format",
-        "export_format_question": "Export Format Selection",
-        "export_format_only": "Choose export file format:\nSelect \"Yes\": Export as plain text file (.txt), one song name per line\nSelect \"No\": Export as CSV file (.csv), one formatted song name per line",
-        "format_name_artist": "Title - Artist",
-        "format_artist_name": "Artist - Title",
-        "format_name_artist_album": "Title - Artist - Album",
+        "export_format_question": "Choose Export Format",
+        "export_format_only": "Select export file format:\nSelect \"Yes\": Export as plain text file (.txt), one song per line\nSelect \"No\": Export as CSV file (.csv) with formatted song names",
+        "format_name_artist": "Title-Artist",
+        "format_artist_name": "Artist-Title",
+        "format_name_artist_album": "Title-Artist-Album",
         "format_custom": "Custom",
-        "custom_format_tip": "Use field names in braces: {name}, {artists}, {album}, {release_date}, {duration}",
+        "custom_format_tip": "Use field names in curly braces: {name}, {artists}, {album}, {release_date}, {duration}",
         "no_valid_tracks": "No valid track data",
         "refresh": "Refresh",
         "confirm_refresh": "Are you sure you want to refresh the song list? This will fetch the latest data from Spotify.",
-        "field_name": "Song Title",
+        "field_name": "Title",
         "field_artists": "Artists",
         "field_album": "Album",
         "field_release_date": "Release Date",
@@ -81,17 +81,17 @@
         "no_image": "No Cover",
         "load_failed": "Load Failed",
         "unknown_playlist": "Unknown Playlist",
-        "unknown_owner": "Unknown Owner",
+        "unknown_owner": "Unknown Creator",
         "loading_songs": "Loading songs...",
         "sort_order": "Original Order",
         "sort_name": "Title",
         "sort_artist": "Artist",
         "sort_album": "Album",
         "sort_duration": "Duration",
-        "sort_added": "Date Added",
+        "sort_added": "Added Date",
         "sort_ascending": "Ascending",
         "sort_descending": "Descending",
-        "search": "Search song title...",
+        "search": "Search songs...",
         "refreshing": "Refreshing...",
         "column": {
             "number": "#",
@@ -126,7 +126,7 @@
         "artist_field": "Artist",
         "album_field": "Album",
         "duration_field": "Duration",
-        "added_at_field": "Added",
+        "added_at_field": "Added at",
         "refreshing_songs": "Refreshing songs...",
         "no_songs": "No songs in this playlist",
         "load_songs_failed": "Failed to load songs",
@@ -140,13 +140,13 @@
         "language": {
             "title": "Language Settings",
             "label": "Display Language",
-            "auto": "Auto (Follow System)",
-            "zh_CN": "Chinese (Simplified)",
+            "auto": "Auto (System)",
+            "zh_CN": "中文 (简体)",
             "en_US": "English (US)"
         },
         "export": {
-            "title": "Export Settings", 
-            "desc": "Configure default format and file type for song exports",
+            "title": "Export Settings",
+            "desc": "Set default format and file type for song exports",
             "format_label": "Export Format:",
             "file_format_label": "File Format:",
             "txt_format": "Text File (.txt)",
@@ -168,16 +168,33 @@
         "cache": {
             "title": "Cache Management",
             "size": "Current cache size: {0}",
-            "desc": "Manage application cache data to free up disk space or refresh content.",
+            "desc": "Clear cache data to free up disk space or refresh content.",
             "clear_btn": "Clear All Cache",
             "confirm": "Confirm Cache Clearing",
-            "confirm_msg": "Are you sure you want to clear all cache? This will delete all cached playlists, songs, and images.",
+            "confirm_msg": "Are you sure you want to clear all cache? This will delete all cached playlist, song, and image data.",
             "success": "Cache cleared!",
             "error": "Failed to clear cache: {0}"
+        },
+        "log": {
+            "title": "Log Settings",
+            "desc": "Set log level and view log files",
+            "level_label": "Log Level:",
+            "level": {
+                "debug": "Debug",
+                "info": "Info",
+                "warning": "Warning",
+                "error": "Error"
+            },
+            "view_btn": "View Logs",
+            "open_error": "Failed to open log file: {0}"
+        },
+        "version": {
+            "title": "Version Information",
+            "desc": "View application version information"
         }
     },
     "splash": {
-        "app_name": "SpotifyExport"
+        "app_name": "SpotifyExportTool"
     },
     "common": {
         "yes": "Yes",
@@ -187,15 +204,16 @@
         "error": "Error",
         "success": "Success",
         "warning": "Warning",
-        "info": "Information"
+        "info": "Information",
+        "loading_settings": "Loading settings..."
     },
     "date": {
-        "now": "just now",
+        "now": "Just now",
         "seconds_ago": "{time} seconds ago",
         "minutes_ago": "{time} minutes ago",
         "hours_ago": "{time} hours ago",
-        "today": "today",
-        "yesterday": "yesterday",
+        "today": "Today",
+        "yesterday": "Yesterday",
         "days_ago": "{time} days ago"
     }
 } 

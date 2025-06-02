@@ -24,43 +24,34 @@ from src.utils.logger import logger
 class HomePage(QMainWindow):
     """主页"""
     
-    def __init__(self, token):
+    def __init__(self, access_token):
         try:
-            logger.info("HomePage初始化开始")
+            logger.debug("HomePage初始化开始")
             super().__init__()
             
             # 初始化Spotify客户端
-            self.token = token
-            logger.info("初始化Spotify客户端")
-            self.sp = spotipy.Spotify(auth=token)
+            logger.debug("初始化Spotify客户端")
+            self.sp = spotipy.Spotify(auth=access_token)
             
-            # 状态属性
-            self.api_connected = True
-            self.last_window_width = 0
-            self.last_window_height = 0
-            
-            # 初始化管理器
-            logger.info("初始化语言和缓存管理器")
+            # 初始化语言和缓存管理器
+            logger.debug("初始化语言和缓存管理器")
             self.language_manager = LanguageManager()
             self.cache_manager = CacheManager()
             
-            # 监听语言变更
-            self.language_manager.language_changed.connect(self.update_ui_texts)
-            
-            # 初始化界面
-            logger.info("初始化HomePage界面")
+            # 初始化HomePage界面
+            logger.debug("初始化HomePage界面")
             self.init_ui()
             
             # 清理过期缓存
-            logger.info("清理过期缓存")
-            self.cache_manager.clear_expired_cache()
+            logger.debug("清理过期缓存")
+            self.cache_manager.clean_expired_cache()
+            
             logger.info("HomePage初始化完成")
         except Exception as e:
             logger.error(f"HomePage初始化失败: {str(e)}")
             import traceback
             traceback.print_exc()
-            raise
-    
+            
     def update_window_title(self):
         """更新窗口标题"""
         self.setWindowTitle("SpotifyExportTool")
@@ -83,106 +74,72 @@ class HomePage(QMainWindow):
             self.playlist_view.update_ui_texts()
     
     def init_ui(self):
-        """初始化界面"""
+        """初始化用户界面"""
         try:
-            logger.info("开始初始化HomePage布局")
-            # 设置窗口属性
-            self.setWindowTitle("SpotifyExportTool")
-            # 获取正确的图标路径
-            icon_path = self.get_resource_path("app_icon.png")
+            logger.debug("开始初始化HomePage布局")
             
+            # 设置窗口标题
+            self.setWindowTitle(self.language_manager.get_text("app.title", "Spotify Export Tool"))
+            
+            # 设置应用图标
+            icon_path = os.path.join(BASE_DIR, "assets", "app_icon.png")
             if os.path.exists(icon_path):
+                logger.debug(f"设置应用图标: {icon_path}")
                 self.setWindowIcon(QIcon(icon_path))
-                logger.info(f"设置应用图标: {icon_path}")
-            else:
-                logger.warning(f"应用图标不存在: {icon_path}")
-                
-            self.setMinimumSize(800, 600)  # 设置最小尺寸
-
+            
             # 创建中央部件
-            logger.info("创建中央部件")
+            logger.debug("创建中央部件")
             central_widget = QWidget()
             self.setCentralWidget(central_widget)
-
-            # 创建主布局（改为垂直布局）
+            
+            # 创建主布局
             main_layout = QVBoxLayout(central_widget)
             main_layout.setContentsMargins(0, 0, 0, 0)
             main_layout.setSpacing(0)
-
-            # 添加顶部栏 - 现在放在最上方，横向占满
-            logger.info("创建顶部栏")
-            self.topbar_view = TopbarView(self.sp)
-            main_layout.addWidget(self.topbar_view)
-
-            # 创建内容区域的布局（水平布局，包含侧边栏和主内容区）
-            self.content_container = QWidget()
-            self.content_layout = QHBoxLayout(self.content_container)
-            self.content_layout.setContentsMargins(0, 0, 0, 0)
-            self.content_layout.setSpacing(0)
             
-            # 添加侧边栏 - 左侧，竖向占满
-            logger.info("创建侧边栏")
-            self.sidebar_view = SidebarView(self.sp)
-            self.content_layout.addWidget(self.sidebar_view)
-
-            # 添加主内容区域
-            logger.info("创建主内容区域")
-            main_content = QWidget()
-            main_content.setStyleSheet("background-color: #040404;")
-            main_content_layout = QVBoxLayout(main_content)
-            main_content_layout.setContentsMargins(0, 0, 0, 0)
-            main_content_layout.setSpacing(0)
-
-            # 内容主体区域（使用QStackedWidget实现页面切换）
-            self.stacked_widget = QStackedWidget()
-            self.stacked_widget.setStyleSheet("background-color: #040404;")
-            main_content_layout.addWidget(self.stacked_widget)
-
+            # 创建顶部栏
+            logger.debug("创建顶部栏")
+            self.topbar = TopbarView(self.sp)
+            main_layout.addWidget(self.topbar)
+            
+            # 创建主内容区域
+            logger.debug("创建主内容区域")
+            content_layout = QHBoxLayout()
+            content_layout.setContentsMargins(0, 0, 0, 0)
+            content_layout.setSpacing(0)
+            
+            # 创建侧边栏
+            logger.debug("创建侧边栏")
+            self.sidebar = SidebarView(self.sp)
+            content_layout.addWidget(self.sidebar)
+            
+            # 创建主视图区域
+            self.main_view_widget = QStackedWidget()
+            content_layout.addWidget(self.main_view_widget)
+            
+            # 添加内容布局到主布局
+            main_layout.addLayout(content_layout)
+            
             # 创建欢迎页面
-            logger.info("创建欢迎页面")
+            logger.debug("创建欢迎页面")
             self.welcome_view = WelcomeView(self.sp)
-            self.stacked_widget.addWidget(self.welcome_view)
-
-            # 创建播放列表视图页（初始时为空，将在选择歌单时创建）
-            self.playlist_view = None
-
-            # 将主内容区添加到水平布局中
-            self.content_layout.addWidget(main_content)
+            self.main_view_widget.addWidget(self.welcome_view)
             
-            # 设置比例（侧边栏宽度固定，主内容区域伸缩）
-            self.content_layout.setStretch(0, 0)  # 侧边栏不伸缩
-            self.content_layout.setStretch(1, 1)  # 主内容区域伸缩
+            # 连接各组件信号
+            logger.debug("连接各组件信号")
+            self.topbar.home_clicked.connect(self.show_welcome_view)
+            self.topbar.settings_clicked.connect(self.show_settings_view)
+            self.sidebar.playlist_selected.connect(self.show_playlist_view)
             
-            # 将内容容器添加到主布局
-            main_layout.addWidget(self.content_container)
-            main_layout.setStretch(1, 1)  # 内容容器可伸缩
-
-            # 连接信号
-            logger.info("连接各组件信号")
-            self.sidebar_view.playlist_selected.connect(self.show_playlist)
-            self.sidebar_view.collapsed_changed.connect(self.adjust_layout)
-            self.topbar_view.home_clicked.connect(self.show_home)
-            self.topbar_view.settings_clicked.connect(self.show_settings)
-
             # 显示欢迎页
-            logger.info("显示欢迎页")
-            self.show_home()
-
-            # 加载用户数据
-            QTimer.singleShot(500, self.load_user_data)
+            logger.debug("显示欢迎页")
+            self.main_view_widget.setCurrentWidget(self.welcome_view)
             
-            # 更新界面文本
-            self.update_ui_texts()
-            
-            # 存储初始窗口大小
-            self.last_window_width = self.width()
-            self.last_window_height = self.height()
             logger.info("HomePage布局初始化完成")
         except Exception as e:
-            logger.error(f"HomePage界面初始化失败: {str(e)}")
+            logger.error(f"HomePage布局初始化失败: {str(e)}")
             import traceback
             traceback.print_exc()
-            raise
     
     def get_resource_path(self, relative_path):
         """
@@ -278,7 +235,7 @@ class HomePage(QMainWindow):
            self.playlist_view.playlist_id == playlist["id"]:
             # 已经在显示该播放列表，触发刷新
             logger.info(f"重新加载当前显示的播放列表: {playlist['name']}")
-            self.playlist_view.load_songs(force_refresh=True)
+            self.playlist_view.refresh_songs()
             return
         
         # 清除之前的内容
@@ -286,11 +243,12 @@ class HomePage(QMainWindow):
         
         # 创建播放列表视图，传递语言管理器和缓存管理器
         self.playlist_view = PlaylistView(
-            self.sp, 
-            playlist,
             parent=self,
-            language_manager=self.language_manager,
-            cache_manager=self.cache_manager
+            spotify_client=self.sp, 
+            playlist_id=playlist["id"],
+            playlist_name=playlist["name"],
+            cache_manager=self.cache_manager,
+            locale_manager=self.language_manager
         )
         self.stacked_widget.addWidget(self.playlist_view)
         self.stacked_widget.setCurrentWidget(self.playlist_view)
@@ -304,13 +262,13 @@ class HomePage(QMainWindow):
         """显示设置页面"""
         self.clear_content()
         
-        # 先显示加载页面
-        loading_view = LoadingView(message_key='common.loading_settings')
+        # 创建加载视图并添加到主内容区域
+        loading_view = LoadingView(message_key='common.loading_settings', parent=self.stacked_widget)
         self.stacked_widget.addWidget(loading_view)
         self.stacked_widget.setCurrentWidget(loading_view)
         
         # 刷新UI
-        QTimer.singleShot(10, lambda: self._load_settings_content(loading_view))
+        QTimer.singleShot(100, lambda: self._load_settings_content(loading_view))
     
     def _load_settings_content(self, loading_view=None):
         """
@@ -324,19 +282,21 @@ class HomePage(QMainWindow):
                 loading_view.deleteLater()
                 
             # 创建设置页面视图
-            settings_view = SettingsView()
+            settings_view = SettingsView(self.stacked_widget)
             self.stacked_widget.addWidget(settings_view)
             self.stacked_widget.setCurrentWidget(settings_view)
             
         except Exception as e:
             logger.error(f"显示设置页面失败: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             
             # 移除加载视图
             if loading_view:
                 self.stacked_widget.removeWidget(loading_view)
                 loading_view.deleteLater()
                 
-            error_view = ErrorView(error_type="loading")
+            error_view = ErrorView(error_type="loading", parent=self.stacked_widget)
             self.stacked_widget.addWidget(error_view)
             self.stacked_widget.setCurrentWidget(error_view)
     

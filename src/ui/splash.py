@@ -1,5 +1,5 @@
 """启动动画窗口"""
-from PyQt5.QtWidgets import QSplashScreen, QProgressBar, QLabel, QVBoxLayout, QWidget
+from PyQt5.QtWidgets import QSplashScreen, QProgressBar, QLabel, QVBoxLayout, QWidget, QDesktopWidget
 from PyQt5.QtGui import QFont, QPainter, QColor, QPixmap
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QDateTime
 import os
@@ -76,6 +76,19 @@ class SplashWindow(QSplashScreen):
     def start(self):
         """启动动画"""
         self.start_time = QDateTime.currentMSecsSinceEpoch()
+        
+        # 获取屏幕几何信息
+        screen = QDesktopWidget().screenGeometry()
+        
+        # 计算窗口居中位置
+        window_width = self.width()
+        window_height = self.height()
+        x = (screen.width() - window_width) // 2
+        y = (screen.height() - window_height) // 2
+        
+        # 移动窗口到屏幕中央
+        self.move(x, y)
+        
         self.show()
         self.timer.start(30)  # 更新频率
         

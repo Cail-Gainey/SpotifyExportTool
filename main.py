@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import QApplication, QDesktopWidget, QMessageBox
 from PyQt5.QtCore import QSettings
 from src.ui.login import load_token, LoginWindow
 from src.ui.home import HomePage
+from src.ui.splash import SplashWindow  # 添加启动动画导入
 from src.utils.logger import logger
 from src.config import settings as settings_module
 
@@ -109,9 +110,13 @@ def main():
         logger.info(f"Python版本: {sys.version}")
         logger.info(f"运行模式: {'打包' if getattr(sys, 'frozen', False) else '脚本'}")
         
-        global login_window, main_window  # 将窗口实例声明为全局变量，防止被垃圾回收
+        global login_window, main_window, splash_window
         app = QApplication(sys.argv)
         
+        # 预先检查认证状态
+        token = check_auth_status()
+        screen = QDesktopWidget().screenGeometry() # 获取屏幕信息以备后用
+
         # 设置应用名称和组织名称
         app.setApplicationName(APP_NAME)
         app.setOrganizationName(ORGANIZATION_NAME)
@@ -120,9 +125,9 @@ def main():
         # 设置日志级别
         log_level = settings_module.get_setting("log_level", "info")
         logger.info(f"应用程序启动，设置日志级别为: {log_level}")
-        logger.set_level(log_level)
+        logger.set_level(log_level)  # 确保设置日志级别为 info
         
-        # 设置全局样式表，确保所有下拉框和弹出窗口都有深色背景
+        # 设置全局样式表
         global_style = """
             QComboBox QAbstractItemView, QComboBoxPrivateContainer {
                 background-color: #282828;
@@ -187,46 +192,53 @@ def main():
         if os.path.exists(icon_path):
             app_icon = QIcon(icon_path)
             app.setWindowIcon(app_icon)
-            logger.info(f"已设置应用图标: {icon_path}")
         else:
             logger.warning(f"找不到应用图标: {icon_path}")
         
-        # 预先检查认证状态
-        token = check_auth_status()
-        screen = QDesktopWidget().screenGeometry() # 获取屏幕信息以备后用
-
+        # 如果token无效，直接显示登录窗口
         if not token:
             logger.info("Token无效或过期，直接显示登录窗口")
             login_window = LoginWindow()
             login_window.show()
         else:
-            logger.info("Token有效，创建主窗口")
-            # 创建主窗口
-            main_window = HomePage(token['access_token'])
+            # 创建启动动画
+            splash_window = SplashWindow()
+            splash_window.start()
+
+            def on_splash_finished():
+                """启动动画完成后的处理函数"""
+                splash_window.close()
+                
+                logger.info("Token有效，创建主窗口")
+                # 创建主窗口
+                main_window = HomePage(token['access_token'])
+                
+                # 从设置中读取窗口大小和位置
+                logger.info("从设置中读取窗口几何信息")
+                settings = QSettings()
+                if settings.contains("window/geometry"):
+                    logger.info("恢复窗口几何信息")
+                    main_window.restoreGeometry(settings.value("window/geometry"))
+                else:
+                    logger.info("使用默认窗口大小和位置")
+                    # 默认窗口大小
+                    main_window.resize(1000, 800)
+                    # 居中显示
+                    window_x = (screen.width() - main_window.width()) // 2
+                    window_y = (screen.height() - main_window.height()) // 2
+                    main_window.move(window_x, window_y)
+                
+                # 显示主窗口
+                logger.info("显示主窗口")
+                main_window.show()
+                
+                # 程序退出时保存窗口大小和位置
+                logger.info("连接窗口退出信号")
+                app.aboutToQuit.connect(lambda: settings.setValue("window/geometry", main_window.saveGeometry()))
+                logger.info("主窗口设置完成")
             
-            # 从设置中读取窗口大小和位置
-            logger.info("从设置中读取窗口几何信息")
-            settings = QSettings()
-            if settings.contains("window/geometry"):
-                logger.info("恢复窗口几何信息")
-                main_window.restoreGeometry(settings.value("window/geometry"))
-            else:
-                logger.info("使用默认窗口大小和位置")
-                # 默认窗口大小
-                main_window.resize(1000, 800)
-                # 居中显示
-                window_x = (screen.width() - main_window.width()) // 2
-                window_y = (screen.height() - main_window.height()) // 2
-                main_window.move(window_x, window_y)
-            
-            # 显示主窗口
-            logger.info("显示主窗口")
-            main_window.show()
-            
-            # 程序退出时保存窗口大小和位置
-            logger.info("连接窗口退出信号")
-            app.aboutToQuit.connect(lambda: settings.setValue("window/geometry", main_window.saveGeometry()))
-            logger.info("主窗口设置完成")
+            # 连接启动动画完成信号
+            splash_window.finished.connect(on_splash_finished)
         
         return app.exec_()
     except Exception as e:

@@ -12,7 +12,7 @@ import os
 class WelcomeView(QWidget):
     def __init__(self, sp):
         try:
-            logger.info("WelcomeView初始化开始")
+            logger.debug("WelcomeView初始化开始")
             super().__init__()
             self.sp = sp
             
@@ -26,14 +26,14 @@ class WelcomeView(QWidget):
             self.error_label = None
             
             # 初始化UI
-            logger.info("初始化WelcomeView UI")
+            logger.debug("初始化WelcomeView UI")
             self.init_ui()
             
             # 连接语言变更信号
             self.language_manager.language_changed.connect(self.update_ui_texts)
             
             # 加载用户信息并更新UI
-            logger.info("加载用户信息")
+            logger.debug("加载用户信息")
             self.load_user_info()
             logger.info("WelcomeView初始化完成")
         except Exception as e:

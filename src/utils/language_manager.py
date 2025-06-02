@@ -7,7 +7,9 @@ import sys
 import locale
 from PyQt5.QtCore import QObject, pyqtSignal
 from src.config import settings
+import logging
 
+logger = logging.getLogger(__name__)
 
 class LanguageManager(QObject):
     """语言管理器类"""
@@ -46,7 +48,7 @@ class LanguageManager(QObject):
         self.supported_languages = ['zh_CN', 'en_US']
         
         # 默认语言
-        self.default_language = 'en_US'
+        self.default_language = 'zh_CN'
         
         # 当前语言
         self.current_language = None
@@ -76,14 +78,14 @@ class LanguageManager(QObject):
                     if os.path.exists(file_path):
                         with open(file_path, 'r', encoding='utf-8') as f:
                             self.translations[lang] = json.load(f)
-                            print(f"成功加载语言文件: {file_path}")
+                            logger.debug(f"成功加载语言文件: {file_path}")
                             loaded = True
                             break
                 except Exception as e:
-                    print(f"尝试加载语言文件失败 {lang} 从 {file_path}: {str(e)}")
+                    logger.error(f"尝试加载语言文件失败 {lang} 从 {file_path}: {str(e)}")
             
             if not loaded:
-                print(f"无法加载语言文件 {lang}，尝试了以下路径: {file_paths}")
+                logger.error(f"无法加载语言文件 {lang}，尝试了以下路径: {file_paths}")
                 # 如果加载失败，使用空字典
                 self.translations[lang] = {}
     
@@ -119,7 +121,7 @@ class LanguageManager(QObject):
             # 对于其他不支持的语言，返回默认语言
             return self.default_language
         except Exception as e:
-            print(f"检测系统语言失败: {str(e)}")
+            logger.error(f"检测系统语言失败: {str(e)}")
             return self.default_language
     
     def set_language(self, language_code):
@@ -127,28 +129,48 @@ class LanguageManager(QObject):
         设置当前语言
         :param language_code: 语言代码 (zh_CN, en_US) 或 'auto'
         """
-        # 处理自动选项
-        if language_code == 'auto':
-            # 保存设置为'auto'
-            settings.set_setting('language', 'auto')
-            # 使用系统检测的语言
-            system_lang = self._get_system_detected_language()
-            # 仅在内部使用实际语言
-            if self.current_language != system_lang:
-                self.current_language = system_lang
-                self.language_changed.emit(system_lang)
+        # 防止递归调用
+        if hasattr(self, '_is_setting_language') and self._is_setting_language:
+            logger.warning("检测到递归调用set_language，已跳过")
             return
-        
-        # 处理明确指定的语言
-        if language_code not in self.supported_languages:
-            language_code = self.default_language
             
-        if self.current_language != language_code:
-            self.current_language = language_code
-            # 保存到设置
-            settings.set_setting('language', language_code)
-            # 发送语言变更信号
-            self.language_changed.emit(language_code)
+        # 设置递归保护标志
+        self._is_setting_language = True
+        
+        try:
+            # 处理自动选项
+            if language_code == 'auto':
+                # 保存设置为'auto'
+                try:
+                    settings.set_setting('language', 'auto')
+                except Exception as e:
+                    logger.error(f"保存语言设置失败: {str(e)}")
+                    
+                # 使用系统检测的语言
+                system_lang = self._get_system_detected_language()
+                # 仅在内部使用实际语言
+                if self.current_language != system_lang:
+                    self.current_language = system_lang
+                    self.language_changed.emit(system_lang)
+                return
+            
+            # 处理明确指定的语言
+            if language_code not in self.supported_languages:
+                language_code = self.default_language
+                
+            if self.current_language != language_code:
+                self.current_language = language_code
+                # 保存到设置
+                try:
+                    settings.set_setting('language', language_code)
+                except Exception as e:
+                    logger.error(f"保存语言设置失败: {str(e)}")
+                    
+                # 发送语言变更信号
+                self.language_changed.emit(language_code)
+        finally:
+            # 重置递归保护标志
+            self._is_setting_language = False
     
     def get_text(self, key, default=''):
         """
@@ -158,6 +180,7 @@ class LanguageManager(QObject):
         :return: 翻译文本
         """
         if not self.current_language:
+            logger.debug(f"当前语言未设置，返回默认值: {default}")
             return default
             
         # 获取当前语言的翻译
@@ -168,13 +191,29 @@ class LanguageManager(QObject):
         
         # 获取嵌套结构中的值
         value = translations
-        for k in keys:
+        for i, k in enumerate(keys):
             if isinstance(value, dict) and k in value:
                 value = value[k]
+                # 如果是最后一个键且值是字典，则返回默认值
+                if i == len(keys) - 1 and isinstance(value, dict):
+                    logger.warning(f"翻译键 '{key}' 返回了字典而不是字符串: {value}")
+                    return default
             else:
+                logger.debug(f"在翻译中找不到键 '{k}' (完整键: '{key}')，返回默认值: {default}")
                 return default
         
-        return value if value else default
+        # 确保返回的是字符串
+        if isinstance(value, dict):
+            logger.warning(f"翻译键 '{key}' 返回了字典而不是字符串: {value}")
+            return default
+        elif value is None:
+            logger.debug(f"翻译键 '{key}' 的值为None，返回默认值: {default}")
+            return default
+        
+        # 转换为字符串并返回
+        result = str(value) if value else default
+        logger.debug(f"翻译键 '{key}' 返回值: {result}")
+        return result
     
     def get_current_language(self):
         """获取当前语言代码"""

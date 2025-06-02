@@ -16,6 +16,7 @@ import webbrowser
 from src.utils.language_manager import LanguageManager
 from src.utils.cache_manager import CacheManager
 from src.utils.logger import logger
+from src.config import version as version_module  # 导入版本模块
 
 class ImageLoader(QThread):
     """图像加载线程"""
@@ -56,7 +57,7 @@ class TopbarView(QWidget):
     
     def __init__(self, sp):
         super().__init__()
-        logger.info("初始化TopbarView")
+        logger.debug("初始化TopbarView")
         self.sp = sp
         self.threads = []
         self.login_window = None
@@ -74,11 +75,11 @@ class TopbarView(QWidget):
         self.setFixedHeight(64)
         
         # 初始化UI
+        logger.debug("初始化TopbarView UI")
         self.init_ui()
     
     def update_ui_texts(self):
         """更新UI文本"""
-        logger.debug("更新TopbarView UI文本")
         # 更新Spotify标签
         if hasattr(self, 'spotify_label'):
             self.spotify_label.setText(self.language_manager.get_text('topbar.app_name', 'SpotifyExport'))
@@ -102,6 +103,12 @@ class TopbarView(QWidget):
         
         if hasattr(self, 'logout_action'):
             self.logout_action.setText(self.language_manager.get_text('topbar.menu.logout', '退出'))
+            
+        # 更新版本号标签
+        if hasattr(self, 'version_label'):
+            current_version = version_module.get_version()
+            self.version_label.setText(f"v{current_version}")
+            self.version_label.setToolTip(f"版本: {current_version}")
 
     def get_resource_path(self, relative_path):
         """
@@ -139,7 +146,6 @@ class TopbarView(QWidget):
 
     def init_ui(self):
         """初始化UI"""
-        logger.info("初始化TopbarView UI")
         # 设置背景颜色和底部边框
         self.setStyleSheet("""
             QWidget {
@@ -236,6 +242,13 @@ class TopbarView(QWidget):
         self.spotify_label.setFont(QFont("PingFang SC", 16, QFont.Bold))
         self.spotify_label.setStyleSheet("color: white; background-color: transparent;")
         nav_layout.addWidget(self.spotify_label)
+        
+        # 添加版本号标签
+        self.version_label = QLabel(f"v{version_module.get_version()}")
+        self.version_label.setFont(QFont("PingFang SC", 10))
+        self.version_label.setStyleSheet("color: #b3b3b3; background-color: transparent;")
+        self.version_label.setToolTip(f"版本: {version_module.get_version()}")
+        nav_layout.addWidget(self.version_label)
         
         content_layout.addWidget(nav_frame)
         

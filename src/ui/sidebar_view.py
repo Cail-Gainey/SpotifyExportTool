@@ -2,7 +2,6 @@
 侧边栏视图
 """
 import os
-from threading import Thread
 import sys
 
 from PyQt5.QtWidgets import (
@@ -15,6 +14,7 @@ from PyQt5.QtCore import Qt, pyqtSignal, QThread, QSize, QPropertyAnimation, QEa
 
 from src.utils.language_manager import LanguageManager
 from src.utils.logger import logger
+from src.utils.thread_manager import thread_manager  # 引入线程管理器
 
 class ImageLoader(QThread):
     """图片加载线程"""
@@ -231,6 +231,7 @@ class SidebarView(QWidget):
         self.is_collapsed = False
         self.playlist_items = []  # 保存所有播放列表项
         self.selected_item = None  # 当前选中的项
+        self.playlists = None  # 新增属性存储预加载的播放列表
         
         # 设置固定宽度
         self.expanded_width = 200  # 减小展开宽度，原为220
@@ -545,44 +546,74 @@ class SidebarView(QWidget):
         # 更新空提示
         self.empty_label.setText(self.language_manager.get_text('sidebar.no_playlists', '没有找到播放列表'))
     
-    def load_playlists(self):
-        """加载用户播放列表"""
-        # 如果已经加载过，直接返回
-        if self.playlists_loaded:
-            return
-        
-        # 显示加载状态
-        self.playlist_stack.setCurrentIndex(0)
-        
-        # 创建异步线程加载
-        thread = Thread(target=self._load_playlists_thread)
-        thread.daemon = True
-        thread.start()
-    
-    def _load_playlists_thread(self):
-        """异步线程加载播放列表"""
-        try:
-            # 获取所有用户播放列表
-            logger.info("开始加载用户播放列表")
-            results = self.sp.current_user_playlists()
-            playlists = results['items']
+    def load_playlists(self, pre_loaded_playlists=None):
+        """加载用户播放列表
+        :param pre_loaded_playlists: 预加载的播放列表，可选
+        """
+        # 如果传入了预加载的播放列表，直接使用
+        if pre_loaded_playlists is not None:
+            # 过滤并清理播放列表数据
+            valid_playlists = [
+                playlist for playlist in pre_loaded_playlists 
+                if playlist and isinstance(playlist, dict) and playlist.get('id')
+            ]
             
-            while results['next']:
-                results = self.sp.next(results)
+            if valid_playlists:
+                logger.info(f"使用传入的{len(valid_playlists)}个播放列表")
+                self.playlists = valid_playlists
+                self._handle_playlists_loaded(valid_playlists)
+                return
+
+        # 检查是否已经在启动动画中加载了播放列表
+        if hasattr(self.sp, 'playlists') and self.sp.playlists:
+            # 过滤并清理播放列表数据
+            valid_playlists = [
+                playlist for playlist in self.sp.playlists 
+                if playlist and isinstance(playlist, dict) and playlist.get('id')
+            ]
+            
+            if valid_playlists:
+                logger.info(f"使用预加载的{len(valid_playlists)}个播放列表")
+                self.playlists = valid_playlists
+                self._handle_playlists_loaded(valid_playlists)
+                return
+
+        # 如果没有预加载的播放列表，尝试重新加载
+        logger.warning("未找到预加载的播放列表，尝试重新加载")
+        
+        def _load_playlists():
+            """异步加载播放列表的线程方法"""
+            try:
+                # 使用Spotify客户端获取播放列表
+                playlists = []
+                results = self.sp.current_user_playlists(limit=50)  # 限制每次获取50个
                 playlists.extend(results['items'])
-            
-            # 发送信号更新UI
-            self._playlists_loaded.emit(playlists)
-            logger.info(f"成功加载{len(playlists)}个播放列表")
-        except Exception as e:
-            logger.error(f"加载播放列表失败: {str(e)}")
-            # 发送错误信号
-            self._loading_error.emit()
-    
-    def _show_error_state(self):
-        """显示错误状态"""
-        self.empty_label.setText(self.language_manager.get_text('sidebar.loading_failed', '加载播放列表失败'))
-        self.playlist_stack.setCurrentIndex(2)
+                
+                # 处理分页
+                while results['next'] and len(playlists) < 200:  # 限制总数为200个
+                    try:
+                        results = self.sp.next(results)
+                        playlists.extend(results['items'])
+                    except Exception as page_error:
+                        logger.warning(f"获取下一页播放列表时出错: {page_error}")
+                        break
+                
+                # 过滤并清理播放列表数据
+                valid_playlists = [
+                    playlist for playlist in playlists 
+                    if playlist and isinstance(playlist, dict) and playlist.get('id')
+                ]
+                
+                # 在主线程中发送信号
+                self._playlists_loaded.emit(valid_playlists)
+                
+            except Exception as e:
+                logger.error(f"重新加载播放列表失败: {str(e)}")
+                # 在主线程中发送错误信号
+                self._loading_error.emit()
+        
+        # 使用线程管理器安全地运行线程
+        thread_manager.safe_thread_run(_load_playlists, category='playlist_loader')
     
     def _handle_playlists_loaded(self, playlists):
         """处理播放列表加载完成
@@ -631,10 +662,11 @@ class SidebarView(QWidget):
     def _on_playlist_item_clicked(self, playlist_data):
         """处理播放列表项点击事件"""
         # 检查是否点击了已选中的项
-        is_same_item = False
         if self.selected_item and self.selected_item.playlist_data["id"] == playlist_data["id"]:
-            is_same_item = True
-            logger.info(f"重复点击同一个播放列表项: {playlist_data['name']}")
+            logger.debug(f"重复点击同一个播放列表项: {playlist_data['name']}")
+            # 即使是重复点击，也强制发送信号，确保UI能够正确切换
+            self.playlist_selected.emit(playlist_data)
+            return
         
         # 清除上一个选中项
         if self.selected_item:
@@ -647,7 +679,7 @@ class SidebarView(QWidget):
                 item.set_selected(True)
                 break
         
-        # 发出播放列表选中信号（标记是否是同一个播放列表的重复点击）
+        # 发出播放列表选中信号
         self.playlist_selected.emit(playlist_data)
     
     def reload_playlists(self):
@@ -658,10 +690,27 @@ class SidebarView(QWidget):
         # 重置加载状态，以便重新加载
         self.playlists_loaded = False
         
-        # 创建异步线程加载
-        thread = Thread(target=self._load_playlists_thread)
-        thread.daemon = True
-        thread.start()
+        def _load_playlists():
+            """异步加载播放列表的线程方法"""
+            try:
+                # 使用Spotify客户端获取播放列表
+                results = self.sp.current_user_playlists()
+                playlists = results['items']
+                
+                while results['next']:
+                    results = self.sp.next(results)
+                    playlists.extend(results['items'])
+                
+                # 在主线程中发送信号
+                self._playlists_loaded.emit(playlists)
+                
+            except Exception as e:
+                logger.error(f"重新加载播放列表失败: {str(e)}")
+                # 在主线程中发送错误信号
+                self._loading_error.emit()
+        
+        # 使用线程管理器安全地运行线程
+        thread_manager.safe_thread_run(_load_playlists, category='playlist_loader')
     
     def toggle_sidebar(self):
         """切换侧边栏折叠/展开状态"""
@@ -707,6 +756,9 @@ class SidebarView(QWidget):
         self.animation.setEasingCurve(QEasingCurve.OutCubic)  # 更平滑的曲线
         self.animation.setStartValue(self.width())
         self.animation.setEndValue(target_width)
+        
+        # 同时设置最大宽度，确保宽度不会意外变大
+        self.setMaximumWidth(target_width)
         
         # 监听动画的valueChanged信号，在动画进行一半时切换界面
         self.animation.valueChanged.connect(self._on_animation_value_changed)
@@ -787,6 +839,11 @@ class SidebarView(QWidget):
                 self.collapsed_scroll.show()
                 self.collapsed_container.show()
                 
+                # 设置固定宽度，防止意外变化
+                self.setFixedWidth(self.collapsed_width)
+                self.setMaximumWidth(self.collapsed_width)
+                self.setMinimumWidth(self.collapsed_width)
+                
                 # 应用折叠状态样式
                 self._update_playlist_items_collapsed(True)
             else:
@@ -795,6 +852,11 @@ class SidebarView(QWidget):
                 
                 self.playlist_header.show()
                 self.playlist_container.show()
+                
+                # 设置固定宽度，防止意外变化
+                self.setFixedWidth(self.expanded_width)
+                self.setMaximumWidth(self.expanded_width)
+                self.setMinimumWidth(self.expanded_width)
                 
                 # 显示常规控件
                 self._show_expanded_controls()
@@ -935,3 +997,11 @@ class SidebarView(QWidget):
                     
                     # 缓存按钮以便后续使用
                     self.cached_icon_buttons.append(icon_button)
+
+    def _show_error_state(self):
+        """显示错误状态"""
+        logger.error("加载播放列表时发生错误")
+        # 切换到空状态
+        self.playlist_stack.setCurrentIndex(2)  # 显示空提示
+        
+        # 可以在这里添加更多错误处理逻辑，比如显示具体的错误信息

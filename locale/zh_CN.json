@@ -54,6 +54,7 @@
         "cancel_select": "取消选择",
         "select_all": "全选",
         "select_all_songs": "全选所有歌曲",
+        "cancel": "取消",
         "clear": "清空",
         "clear_selection": "清除选择",
         "export_button": "导出",

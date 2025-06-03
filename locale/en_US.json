@@ -54,6 +54,7 @@
         "cancel_select": "Cancel all",
         "select_all": "Select All",
         "select_all_songs": "Select all songs",
+        "cancel": "Cancel",
         "clear": "Clear",
         "clear_selection": "Clear all",
         "export_button": "Export",

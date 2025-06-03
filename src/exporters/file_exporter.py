@@ -6,11 +6,12 @@ import os
 import json
 import csv
 from datetime import datetime
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 from PyQt5.QtCore import QSettings, QObject, pyqtSignal
 
 from src.utils.logger import logger
 from src.config import settings
+from src.utils.thread_manager import thread_manager
 
 
 class FileExporter(QObject):
@@ -148,6 +149,32 @@ class FileExporter(QObject):
             }
         }
         
+    def threaded_export(func):
+        """
+        装饰器，用于在线程中安全地运行导出方法
+        
+        Args:
+            func: 要在线程中运行的方法
+        
+        Returns:
+            包装后的方法
+        """
+        def wrapper(self, *args, **kwargs):
+            def export_task():
+                try:
+                    result = func(self, *args, **kwargs)
+                    self.finished_signal.emit(result, self.last_error or "")
+                except Exception as e:
+                    self.last_error = str(e)
+                    logger.error(f"导出任务出错: {e}")
+                    self.finished_signal.emit(False, self.last_error)
+            
+            # 使用线程管理器安全地运行导出任务
+            thread_manager.safe_thread_run(export_task, category='file_export')
+            return True
+        return wrapper
+
+    @threaded_export
     def export(self, songs: List[Dict[str, Any]], **kwargs) -> bool:
         """
         执行导出操作
@@ -179,7 +206,6 @@ class FileExporter(QObject):
             if not valid_songs:
                 self.last_error = "没有有效的歌曲数据"
                 logger.warning("导出失败：没有有效的歌曲数据")
-                self.finished_signal.emit(False, self.last_error)
                 return False
             
             # 记录导出信息，用于调试
@@ -202,18 +228,12 @@ class FileExporter(QObject):
             elif format_type.lower() == 'txt':
                 self._export_txt(valid_songs, file_path, total_songs)
             else:
-                # 默认使用txt格式
-                logger.warning(f"未知的格式类型 {format_type}，将使用txt格式")
-                self._export_txt(valid_songs, file_path, total_songs)
+                raise ValueError(f"不支持的导出格式: {format_type}")
             
-            # 导出成功
-            self.finished_signal.emit(True, "")
             return True
-                
         except Exception as e:
-            self.last_error = f"导出时发生错误: {str(e)}"
-            logger.error(f"文件导出失败: {str(e)}", exc_info=True)
-            self.finished_signal.emit(False, self.last_error)
+            self.last_error = str(e)
+            logger.error(f"导出失败: {e}")
             return False
             
     def validate_songs(self, songs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:

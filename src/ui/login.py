@@ -20,6 +20,7 @@ from spotipy.oauth2 import SpotifyOAuth
 from src.config import config as config
 from src.utils.language_manager import LanguageManager
 from src.utils.logger import logger
+from src.utils.thread_manager import thread_manager  # 引入线程管理器
 
 # 获取当前文件所在目录
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -69,7 +70,51 @@ class MyHandler(http.server.SimpleHTTPRequestHandler):
                     self.send_response(200)
                     self.send_header('Content-type', 'text/html; charset=utf-8')
                     self.end_headers()
-                    response_text = '<html><body><h1>授权成功，请返回应用继续操作。</h1></body></html>'
+                    # 自定义成功页面，增加样式和友好提示
+                    response_text = '''
+                    <!DOCTYPE html>
+                    <html lang="zh-CN">
+                    <head>
+                        <meta charset="UTF-8">
+                        <title>授权成功</title>
+                        <style>
+                            body {
+                                font-family: 'Arial', sans-serif;
+                                background-color: #040404;
+                                color: #1DB954;
+                                display: flex;
+                                justify-content: center;
+                                align-items: center;
+                                height: 100vh;
+                                margin: 0;
+                                text-align: center;
+                            }
+                            .container {
+                                background-color: #282828;
+                                padding: 40px;
+                                border-radius: 10px;
+                                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                            }
+                            h1 {
+                                color: #1DB954;
+                                margin-bottom: 20px;
+                            }
+                            p {
+                                color: #b3b3b3;
+                                line-height: 1.6;
+                            }
+                        </style>
+                    </head>
+                    <body>
+                        <div class="container">
+                            <h1>授权成功！</h1>
+                            <p>您已成功授权 SpotifyExportTool。</p>
+                            <p>现在可以返回应用程序继续操作。</p>
+                            <p>您可以关闭此页面。</p>
+                        </div>
+                    </body>
+                    </html>
+                    '''
                     self.wfile.write(response_text.encode('utf-8'))
                     # 更新UI状态
                     authorized = True
@@ -519,3 +564,103 @@ class LoginWindow(QMainWindow):
             logger.error(f"关闭登录窗口失败: {str(e)}")
             import traceback
             traceback.print_exc()
+
+def start_authorization(self):
+    """启动授权过程"""
+    # 创建本地服务器
+    def start_local_server():
+        """启动本地授权服务器"""
+        try:
+            # 创建并启动本地服务器
+            from http.server import HTTPServer, BaseHTTPRequestHandler
+            import urllib.parse
+            
+            class AuthHandler(BaseHTTPRequestHandler):
+                def do_GET(self):
+                    """处理GET请求"""
+                    # 解析查询参数
+                    query = urllib.parse.urlparse(self.path).query
+                    params = dict(urllib.parse.parse_qsl(query))
+                    
+                    # 检查是否包含授权码
+                    if 'code' in params:
+                        # 发送成功响应
+                        self.send_response(200)
+                        self.send_header('Content-type', 'text/html; charset=utf-8')
+                        self.end_headers()
+                        
+                        # 返回成功页面
+                        success_html = f"""
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <meta charset="utf-8">
+                            <title>授权成功</title>
+                            <style>
+                                body {{ 
+                                    font-family: Arial, sans-serif; 
+                                    background-color: #040404; 
+                                    color: #1DB954; 
+                                    display: flex; 
+                                    justify-content: center; 
+                                    align-items: center; 
+                                    height: 100vh; 
+                                    margin: 0; 
+                                    text-align: center;
+                                }}
+                                .container {{ 
+                                    background-color: #121212; 
+                                    padding: 30px; 
+                                    border-radius: 10px; 
+                                    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                                }}
+                            </style>
+                        </head>
+                        <body>
+                            <div class="container">
+                                <h1>登录成功！</h1>
+                                <p>正在跳转...</p>
+                            </div>
+                            <script>
+                                setTimeout(function() {{ 
+                                    window.close(); 
+                                }}, 2000);
+                            </script>
+                        </body>
+                        </html>
+                        """
+                        
+                        self.wfile.write(success_html.encode('utf-8'))
+                        
+                        # 将授权码传递给主线程
+                        self.server.auth_code = params['code']
+                    else:
+                        # 发送错误响应
+                        self.send_response(400)
+                        self.end_headers()
+                        self.wfile.write(b'Authorization failed')
+            
+            # 创建服务器
+            server_address = ('localhost', 8888)
+            httpd = HTTPServer(server_address, AuthHandler)
+            httpd.auth_code = None
+            
+            logger.info("本地授权服务器已启动")
+            
+            # 等待授权码
+            httpd.handle_request()
+            
+            # 检查是否获取到授权码
+            if httpd.auth_code:
+                # 发送授权码到主线程
+                self.auth_code_received.emit(httpd.auth_code)
+            else:
+                # 发送错误信号
+                self.auth_error.emit("未获取到授权码")
+        
+        except Exception as e:
+            logger.error(f"本地服务器启动失败: {str(e)}")
+            self.auth_error.emit(str(e))
+    
+    # 使用线程管理器安全地运行线程
+    thread_manager.safe_thread_run(start_local_server, category='auth_server')

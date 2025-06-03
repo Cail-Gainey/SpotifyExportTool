@@ -10,7 +10,7 @@ from PyQt5.QtCore import QSettings
 from src.ui.login import load_token, LoginWindow
 from src.ui.home import HomePage
 from src.ui.splash import SplashWindow  # 添加启动动画导入
-from src.utils.logger import logger
+from src.utils.logger import log_path, logger
 from src.config import settings as settings_module
 
 # 设置 QSettings
@@ -104,8 +104,10 @@ def main():
     """主函数"""
     try:
         # 在程序开始时记录日志路径
-        logger.info(f"程序启动，日志路径: {logger.get_log_path()}")
-        logger.info(f"错误日志路径: {logger.get_error_log_path()}")
+        # logger.info(f"程序启动，日志路径: {logger.get_log_path()}")
+        error_log_path = os.path.join(LOG_DIR, 'error.log')
+        logger.info(f"程序启动，日志路径: {log_path}")
+        logger.info(f"错误日志路径: {error_log_path}")
         logger.info(f"基础目录: {BASE_DIR}")
         logger.info(f"Python版本: {sys.version}")
         logger.info(f"运行模式: {'打包' if getattr(sys, 'frozen', False) else '脚本'}")
@@ -125,7 +127,7 @@ def main():
         # 设置日志级别
         log_level = settings_module.get_setting("log_level", "info")
         logger.info(f"应用程序启动，设置日志级别为: {log_level}")
-        logger.set_level(log_level)  # 确保设置日志级别为 info
+        logger.level(log_level.upper())  # 设置loguru日志级别
         
         # 设置全局样式表
         global_style = """
@@ -209,36 +211,72 @@ def main():
                 """启动动画完成后的处理函数"""
                 splash_window.close()
                 
-                logger.info("Token有效，创建主窗口")
-                # 创建主窗口
-                main_window = HomePage(token['access_token'])
+                try:
+                    logger.info("Token有效，创建主窗口")
+                    # 传递预加载的用户信息和播放列表
+                    if hasattr(splash_window, 'user_info'):
+                        sp.user_info = splash_window.user_info
+                    
+                    if hasattr(splash_window, 'playlists'):
+                        sp.playlists = splash_window.playlists
+                    
+                    # 创建主窗口
+                    main_window = HomePage(token['access_token'])
+                    
+                    # 从设置中读取窗口大小和位置
+                    logger.debug("从设置中读取窗口几何信息")
+                    settings = QSettings()
+                    if settings.contains("window/geometry"):
+                        logger.debug("恢复窗口几何信息")
+                        main_window.restoreGeometry(settings.value("window/geometry"))
+                    else:
+                        logger.debug("使用默认窗口大小和位置")
+                        # 默认窗口大小
+                        main_window.resize(1000, 800)
+                        # 居中显示
+                        window_x = (screen.width() - main_window.width()) // 2
+                        window_y = (screen.height() - main_window.height()) // 2
+                        main_window.move(window_x, window_y)
+                    
+                    # 显示主窗口
+                    logger.debug("显示主窗口")
+                    main_window.show()
+                    
+                    # 程序退出时保存窗口大小和位置
+                    logger.debug("连接窗口退出信号")
+                    app.aboutToQuit.connect(lambda: settings.setValue("window/geometry", main_window.saveGeometry()))
+                    logger.debug("主窗口设置完成")
                 
-                # 从设置中读取窗口大小和位置
-                logger.info("从设置中读取窗口几何信息")
-                settings = QSettings()
-                if settings.contains("window/geometry"):
-                    logger.info("恢复窗口几何信息")
-                    main_window.restoreGeometry(settings.value("window/geometry"))
-                else:
-                    logger.info("使用默认窗口大小和位置")
-                    # 默认窗口大小
-                    main_window.resize(1000, 800)
-                    # 居中显示
-                    window_x = (screen.width() - main_window.width()) // 2
-                    window_y = (screen.height() - main_window.height()) // 2
-                    main_window.move(window_x, window_y)
-                
-                # 显示主窗口
-                logger.info("显示主窗口")
-                main_window.show()
-                
-                # 程序退出时保存窗口大小和位置
-                logger.info("连接窗口退出信号")
-                app.aboutToQuit.connect(lambda: settings.setValue("window/geometry", main_window.saveGeometry()))
-                logger.info("主窗口设置完成")
+                except Exception as e:
+                    error_msg = f"创建主窗口失败: {str(e)}"
+                    logger.error(error_msg)
+                    
+                    # 显示错误消息
+                    QMessageBox.critical(None, "启动错误", error_msg)
+                    
+                    # 重新显示登录窗口
+                    login_window = LoginWindow()
+                    login_window.show()
             
-            # 连接启动动画完成信号
+            def on_loading_status(status):
+                """处理加载状态"""
+                logger.info(f"启动加载状态: {status}")
+                splash_window.update_status(status)
+            
+            def on_loading_failed(error):
+                """处理加载失败"""
+                logger.error(f"启动加载失败: {error}")
+                splash_window.show_error(error)
+            
+            # 连接启动动画完成信号和加载信号
             splash_window.finished.connect(on_splash_finished)
+            splash_window.loading_status.connect(on_loading_status)
+            splash_window.loading_failed.connect(on_loading_failed)
+            
+            # 开始加载用户数据
+            import spotipy
+            sp = spotipy.Spotify(auth=token['access_token'])
+            splash_window.start_loading(sp)
         
         return app.exec_()
     except Exception as e:

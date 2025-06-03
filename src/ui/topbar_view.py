@@ -4,51 +4,16 @@
 from PyQt5.QtWidgets import (QWidget, QHBoxLayout, QLabel, 
                            QFrame, QToolButton, QVBoxLayout,
                            QMenu, QAction, QMessageBox, QDesktopWidget)
-from PyQt5.QtGui import QFont, QPixmap, QImage, QIcon, QPainter, QPalette
-from PyQt5.QtCore import Qt, pyqtSignal, QThread, QSize, QPoint, QTimer, QEvent
-import requests
-from io import BytesIO
+from PyQt5.QtGui import QFont, QPixmap, QIcon, QPainter, QPalette, QBrush, QColor, QImage
+from PyQt5.QtCore import Qt, pyqtSignal, QSize, QPoint, QTimer, QEvent
 import os
 import sys
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 import webbrowser
 from src.utils.language_manager import LanguageManager
 from src.utils.cache_manager import CacheManager
 from src.utils.logger import logger
 from src.config import version as version_module  # 导入版本模块
-
-class ImageLoader(QThread):
-    """图像加载线程"""
-    image_loaded = pyqtSignal(QImage)
-    
-    def __init__(self, url):
-        super().__init__()
-        self.url = url
-    
-    def run(self):
-        try:
-            logger.debug(f"开始加载用户头像: {self.url}")
-            # 设置重试策略
-            session = requests.Session()
-            retries = Retry(total=3, backoff_factor=0.5)
-            session.mount('https://', HTTPAdapter(max_retries=retries))
-            
-            response = session.get(self.url, timeout=10)
-            response.raise_for_status()
-            
-            # 加载图片
-            img_data = BytesIO(response.content)
-            image = QImage()
-            image.loadFromData(img_data.getvalue())
-            
-            # 发送信号，传递图片
-            logger.debug("用户头像加载成功，准备显示")
-            self.image_loaded.emit(image)
-            
-        except Exception as e:
-            logger.error(f"加载用户头像失败: {str(e)}")
-            print(f"加载用户头像失败: {str(e)}")
+from src.utils.image_loader import ImageLoader  # 替换原有的ImageLoader类
 
 class TopbarView(QWidget):
     """顶栏视图"""
@@ -118,27 +83,25 @@ class TopbarView(QWidget):
         :return: 资源文件的绝对路径
         """
         try:
-            # 如果在打包环境中，基础路径会有所不同
-            if getattr(sys, 'frozen', False):
-                # 在打包环境中，使用应用程序所在目录
-                base_path = os.path.dirname(sys.executable)
-                
-                # 然后尝试在assets目录查找
-                assets_path = os.path.join(base_path, "assets", relative_path)
-                if os.path.exists(assets_path):
-                    return assets_path
-
-            else:
-                # 在开发环境中，使用项目根目录
-                base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-                
-                # 尝试在src/assets目录查找
-                src_assets_path = os.path.join(base_path, "assets", relative_path)
-                if os.path.exists(src_assets_path):
-                    return src_assets_path
+            # 基础路径为项目根目录
+            base_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            
+            # 尝试的资源路径
+            assets_paths = [
+                os.path.join(base_path, "assets", relative_path),
+                os.path.join(base_path, relative_path)
+            ]
+            
+            # 遍历可能的路径
+            for path in assets_paths:
+                if os.path.exists(path):
+                    logger.debug(f"找到资源文件: {path}")
+                    return path
                     
-                # 如果找不到，返回默认路径
-                return src_assets_path
+            # 如果找不到，返回第一个路径
+            logger.warning(f"未找到资源文件: {relative_path}")
+            return assets_paths[0]
+        
         except Exception as e:
             logger.error(f"获取资源路径失败: {str(e)}")
             # 如果出错，返回相对路径
@@ -259,21 +222,38 @@ class TopbarView(QWidget):
         
         # 用户头像按钮（带下拉菜单）
         self.avatar_btn = QToolButton()
-        self.avatar_btn.setFixedSize(32, 32)
-        self.avatar_btn.setStyleSheet("""
-            QToolButton {
-                background-color: rgba(255, 255, 255, 0.1);
-                border-radius: 16px;
-                color: white;
-            }
-            QToolButton:hover {
-                background-color: rgba(255, 255, 255, 0.2);
-            }
-            QToolButton::menu-indicator {
-                image: none;
-            }
-        """)
-        self.avatar_btn.setText("")
+        self.avatar_btn.setFixedSize(40, 40)  # 确保按钮大小与图标一致
+        
+        # 调试样式表设置
+        try:
+            avatar_btn_style = """
+                QToolButton {
+                    background-color: rgba(255, 255, 255, 0.1);
+                    border-radius: 20px;
+                    color: white;
+                }
+                QToolButton:hover {
+                    background-color: rgba(255, 255, 255, 0.2);
+                }
+            """
+            self.avatar_btn.setStyleSheet(avatar_btn_style)
+        except Exception as e:
+            logger.error(f"设置头像按钮样式表时出错: {e}")
+        
+        # 设置默认图标（灰色圆形）
+        default_pixmap = QPixmap(40, 40)
+        default_pixmap.fill(Qt.transparent)
+        
+        painter = QPainter(default_pixmap)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setBrush(QBrush(QColor(128, 128, 128, 100)))  # 半透明灰色
+        painter.setPen(Qt.NoPen)
+        painter.drawEllipse(0, 0, default_pixmap.width(), default_pixmap.height())
+        painter.end()
+        
+        # 设置默认图标
+        self.avatar_btn.setIcon(QIcon(default_pixmap))
+        self.avatar_btn.setIconSize(QSize(40, 40))
         
         # 创建下拉菜单
         self.menu = QMenu(self)
@@ -500,69 +480,119 @@ class TopbarView(QWidget):
     def load_user_info(self):
         """加载用户信息"""
         try:
-            logger.info("开始加载用户信息")
-            user_info = self.sp.current_user()
-            self.username_action.setText(user_info['display_name'])
-            self.api_connected = True
-            logger.info(f"加载到用户名: {user_info['display_name']}")
+            logger.debug("开始加载用户信息")
             
-            # 加载用户头像
-            if user_info['images']:
-                image_url = user_info['images'][0]['url']
-                logger.debug(f"开始加载用户头像: {image_url}")
-                loader = ImageLoader(image_url)
-                loader.image_loaded.connect(lambda image: self.on_avatar_loaded(image, image_url))
-                self.threads.append(loader)
-                loader.start()
+            # 检查是否已经在启动动画中加载了用户信息
+            if hasattr(self.sp, 'user_info'):
+                user_info = self.sp.user_info
+                logger.info(f"加载到用户名: {user_info['display_name']}")
                 
+                # 更新用户名
+                self.username_action.setText(user_info['display_name'])
+                
+                # 加载用户头像
+                if user_info.get('images'):
+                    image_url = user_info['images'][0]['url']
+                    logger.debug(f"开始加载用户头像: {image_url}")
+                    
+                    # 使用异步加载头像
+                    loader = ImageLoader(image_url, track_id='user_avatar', cache_manager=self.cache_manager)
+                    loader.image_loaded.connect(self.on_avatar_loaded)
+                    loader.load_failed.connect(self._on_avatar_load_failed)
+                    loader.start()
+                
+            else:
+                # 如果没有预加载的用户信息，记录错误
+                logger.error("未找到预加载的用户信息")
+                self.username_action.setText(self.language_manager.get_text('topbar.unknown_user', '未知用户'))
+            
         except Exception as e:
             logger.error(f"加载用户信息失败: {str(e)}")
             self.username_action.setText(self.language_manager.get_text('topbar.unknown_user', '未知用户'))
-            self.api_connected = False
-            # 加载默认头像
-            self.avatar_btn.setText("?")
-            self.avatar_btn.setStyleSheet("""
-                QToolButton {
-                    background-color: rgba(255, 255, 255, 0.1);
-                    border-radius: 16px;
-                    color: white;
-                    font-weight: bold;
-                    font-size: 16px;
-                }
-                QToolButton:hover {
-                    background-color: rgba(255, 255, 255, 0.2);
-                }
-                QToolButton::menu-indicator {
-                    image: none;
-                }
-            """)
     
-    def on_avatar_loaded(self, image, url):
-        """头像加载完成回调"""
-        if not image.isNull():
-            logger.debug("用户头像加载成功，开始处理圆形裁剪")
+    def _on_avatar_load_failed(self, url):
+        """处理头像加载失败的情况"""
+        logger.warning(f"用户头像加载失败: {url}")
+        
+        # 尝试加载默认头像
+        default_avatar_path = self.get_resource_path('default_avatar.png')
+        logger.debug(f"使用默认头像: {default_avatar_path}")
+        
+        if os.path.exists(default_avatar_path):
+            avatar_pixmap = QPixmap(default_avatar_path)
+            # 缩放头像到合适尺寸
+            avatar_pixmap = avatar_pixmap.scaled(40, 40, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            
+            # 更新头像
+            self.avatar_btn.setIcon(QIcon(avatar_pixmap))
+            self.avatar_btn.setIconSize(QSize(40, 40))
+        else:
+            logger.error(f"默认头像文件不存在: {default_avatar_path}")
+    
+    def on_avatar_loaded(self, image, track_id=None):
+        """
+        头像加载完成的回调方法
+        
+        Args:
+            image: 加载的图像（现在可能是QPixmap或QImage）
+            track_id: 图像的唯一标识符（可选）
+        """
+        try:
+            # 详细日志记录
+            logger.debug(f"on_avatar_loaded 开始处理，track_id: {track_id}")
+            
+            # 检查图像是否为空
+            if image is None or (hasattr(image, 'isNull') and image.isNull()):
+                logger.warning("接收到空图像")
+                self._on_avatar_load_failed(track_id or 'unknown')
+                return
+            
+            # 处理不同类型的图像输入
+            if isinstance(image, QImage):
+                pixmap = QPixmap.fromImage(image)
+            elif isinstance(image, QPixmap):
+                pixmap = image
+            else:
+                logger.warning(f"未知的图像类型: {type(image)}")
+                self._on_avatar_load_failed(track_id or 'unknown')
+                return
+            
+            # 记录原始图像信息
+            logger.debug(f"原始图像尺寸: {pixmap.width()}x{pixmap.height()}")
+            
+            # 缩放图像
+            scaled_pixmap = pixmap.scaled(
+                40, 40, 
+                Qt.KeepAspectRatio, 
+                Qt.SmoothTransformation
+            )
+            
+            logger.debug(f"缩放后图像尺寸: {scaled_pixmap.width()}x{scaled_pixmap.height()}")
+            
             # 创建圆形头像
-            target_size = 32
-            rounded = QImage(target_size, target_size, QImage.Format_ARGB32)
-            rounded.fill(Qt.transparent)
+            rounded_avatar = QPixmap(scaled_pixmap.size())
+            rounded_avatar.fill(Qt.transparent)
             
-            painter = QPainter(rounded)
+            painter = QPainter(rounded_avatar)
             painter.setRenderHint(QPainter.Antialiasing)
-            painter.setBrush(Qt.white)
+            painter.setBrush(QBrush(scaled_pixmap))
             painter.setPen(Qt.NoPen)
-            painter.drawEllipse(0, 0, target_size, target_size)
-            painter.setCompositionMode(QPainter.CompositionMode_SourceIn)
-            
-            scaled = image.scaled(target_size, target_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            painter.drawImage(0, 0, scaled)
+            painter.drawEllipse(0, 0, scaled_pixmap.width(), scaled_pixmap.height())
             painter.end()
             
-            # 缓存头像
-            self.cache_manager.cache_image(url, rounded, 'avatar')
+            # 更新头像
+            icon = QIcon(rounded_avatar)
+            self.avatar_btn.setIcon(icon)
+            self.avatar_btn.setIconSize(QSize(40, 40))
             
-            self.avatar_btn.setIcon(QIcon(QPixmap.fromImage(rounded)))
-            self.avatar_btn.setIconSize(QSize(32, 32))
-            logger.debug("用户头像显示完成")
+            # 额外的调试信息
+            logger.debug(f"头像图标是否为空: {icon.isNull()}")
+            logger.debug("用户头像加载并显示成功")
+        except Exception as e:
+            logger.error(f"处理用户头像时发生错误: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
+            self._on_avatar_load_failed(track_id or 'unknown')
     
     def on_home_clicked(self):
         """处理主页点击事件"""

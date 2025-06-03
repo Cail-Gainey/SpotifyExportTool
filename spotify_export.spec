@@ -77,6 +77,8 @@ added_files = [
     ('locale', 'locale'),  # 从根目录复制语言文件
     ('src/ui', 'ui'),
     ('src/utils', 'utils'),
+    ('src/exporters', 'exporters'),
+    ('src/tools', 'tools'),
 ]
 
 
@@ -117,10 +119,12 @@ a = Analysis(
         'src.utils.cache_manager',
         'src.utils.time_utils',
         'src.utils.language_manager',
+        'src.utils.thread_manager',
         # 添加其他核心模块
         'src.ui.home',
         'src.ui.login',
         'src.ui.splash',
+        'src.config.settings',
         'json',
         'datetime',
         'urllib.parse',
@@ -197,7 +201,7 @@ if os.path.exists(os.path.join('dist', 'SpotifyExportTool')):
     os.makedirs(assets_dir, exist_ok=True)
     
     # 复制资源文件
-    src_assets_dir = os.path.join(ROOT_DIR, 'src', 'assets')
+    src_assets_dir = os.path.join(ROOT_DIR, 'assets')
     if os.path.exists(src_assets_dir):
         print(f"复制资源文件从 {src_assets_dir} 到 {assets_dir}")
         for file in os.listdir(src_assets_dir):

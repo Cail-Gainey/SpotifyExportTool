@@ -143,13 +143,23 @@ def create_song_item(self, track, index):
 
 
 def create_song_list(self, songs=None, filter_text=None, replace=False):
-    """创建歌曲列表
-
-    Args:
-        songs: 歌曲列表，如果为None则使用当前的歌曲
-        filter_text: 过滤文本
-        replace: 是否替换现有歌曲列表
     """
+    创建歌曲列表
+    
+    Args:
+        songs: 要显示的歌曲列表
+        filter_text: 过滤文本
+        replace: 是否替换现有列表
+    """
+    # 如果没有传入歌曲，使用当前歌曲列表
+    if songs is None:
+        songs = self.current_songs
+
+    # 确保歌曲有正确的索引
+    for song in songs:
+        # 优先使用 original_index，如果没有则使用默认索引
+        song['index'] = song.get('original_index', song.get('index', 0))
+
     # 如果正在创建列表，跳过
     if self.is_creating_list:
         logger.debug("跳过创建歌曲列表，因为当前已经在创建")
@@ -228,8 +238,22 @@ def _add_songs_batch(self, songs, batch_size=30):
         songs: 歌曲列表
         batch_size: 每批添加的歌曲数量
     """
+    # 预处理歌曲数据，确保每首歌都有正确的数据结构
+    processed_songs = []
+    for song in songs:
+        # 如果歌曲已经是处理后的格式，直接使用
+        if all(key in song for key in ['id', 'name', 'album', 'artist']):
+            processed_songs.append(song)
+        else:
+            # 否则尝试处理原始数据
+            try:
+                processed_song = self._process_track_data(song)
+                processed_songs.append(processed_song)
+            except Exception as e:
+                logger.error(f"处理歌曲数据失败: {str(e)}")
+
     # 保存所有要添加的歌曲
-    self.pending_songs = songs.copy()
+    self.pending_songs = processed_songs
     self.batch_size = batch_size
     self.current_batch_index = 0
 
@@ -301,54 +325,83 @@ def _process_track_data(self, track_item):
 
 
 def _add_next_songs_batch(self):
-    """添加下一批歌曲"""
-    if not self.pending_songs or self.current_batch_index >= len(self.pending_songs):
-        # 所有批次添加完成
-        return
+    """批量添加下一批歌曲以提高性能"""
+    try:
+        # 如果没有待添加的歌曲，直接返回
+        if not hasattr(self, 'pending_songs') or not self.pending_songs:
+            return
 
-    # 计算当前批次范围
-    start_index = self.current_batch_index
-    end_index = min(start_index + self.batch_size, len(self.pending_songs))
-    current_batch = self.pending_songs[start_index:end_index]
+        # 确定正确的歌曲列表布局
+        songs_layout = None
+        layout_names = ['song_list_layout', 'songs_layout', 'song_layout']
+        for name in layout_names:
+            if hasattr(self, name):
+                songs_layout = getattr(self, name)
+                break
 
-    # 获取当前歌曲列表中的歌曲数量
-    current_count = self.songs_layout.count() - 1  # 减去stretch
+        if songs_layout is None:
+            raise AttributeError(f"未找到歌曲列表布局，尝试的布局名称: {layout_names}")
 
-    # 批量添加歌曲项
-    for i, track_item in enumerate(current_batch):
-        # 处理track数据
-        track = self._process_track_data(track_item)
-        
-        # 确保track有id字段
-        if 'id' not in track:
-            logger.debug(f"跳过没有ID的歌曲 (索引: {i})")
-            continue
+        # 计算本批次的起始和结束索引
+        start_index = self.current_batch_index * self.batch_size
+        end_index = min(start_index + self.batch_size, len(self.pending_songs))
+
+        # 获取本批次的歌曲
+        batch_songs = self.pending_songs[start_index:end_index]
+
+        # 为每首歌曲设置正确的索引
+        for i, song in enumerate(batch_songs, start=start_index + 1):
+            song['index'] = i
+            # 确保歌曲有id
+            if 'id' not in song:
+                song['id'] = f"unknown_{hash(str(song))}"
+
+        # 创建并添加歌曲项
+        for song in batch_songs:
+            song_item = self.create_song_item(song, song['index'])
             
-        song_index = current_count + i + 1  # +1 是因为歌曲索引从1开始
-        song_item = self.create_song_item(track, song_index)
+            # 根据布局类型选择添加方法
+            if hasattr(songs_layout, 'addWidget'):
+                songs_layout.addWidget(song_item)
+            elif hasattr(songs_layout, 'insertWidget'):
+                # 对于需要在特定位置插入的布局
+                songs_layout.insertWidget(songs_layout.count() - 1, song_item)
+            else:
+                logger.warning(f"无法将歌曲项添加到布局：未知的布局类型 {type(songs_layout)}")
+                continue
 
-        # 如果是在导出模式下，显示复选框
-        if self.export_mode:
-            song_item.checkbox.show()
+            # 记录歌曲项
+            self.song_items[song['id']] = song_item
 
-        # 将歌曲项添加到布局
-        self.songs_layout.insertWidget(self.songs_layout.count() - 1, song_item)
+        # 更新批次索引
+        self.current_batch_index += 1
 
-        # 记录歌曲项
-        self.song_items[track["id"]] = song_item
+        # 检查是否还有更多歌曲需要添加
+        if end_index >= len(self.pending_songs):
+            # 所有歌曲已添加完毕
+            del self.pending_songs
+            del self.current_batch_index
+            del self.batch_size
 
-    # 更新当前批次索引
-    self.current_batch_index = end_index
+            # 更新歌曲标签文本
+            QTimer.singleShot(100, self.update_song_labels_text)
+        else:
+            # 继续添加下一批
+            QTimer.singleShot(50, self._add_next_songs_batch)
 
-    # 如果还有更多批次要添加，延迟添加下一批
-    if self.current_batch_index < len(self.pending_songs):
-        QTimer.singleShot(20, self._add_next_songs_batch)
-    else:
-        # 所有批次添加完成后
-        # 首先更新文本省略显示
-        QTimer.singleShot(50, self.update_song_labels_text)
-        # 然后请求加载图片
-        QTimer.singleShot(100, self.load_visible_song_images)
+    except Exception as e:
+        logger.error(f"批量添加歌曲出错: {str(e)}")
+        # 打印详细的异常信息
+        import traceback
+        traceback.print_exc()
+        
+        # 确保即使出错也重置状态
+        if hasattr(self, 'pending_songs'):
+            del self.pending_songs
+        if hasattr(self, 'current_batch_index'):
+            del self.current_batch_index
+        if hasattr(self, 'batch_size'):
+            del self.batch_size
 
 
 def _clear_song_list(self):
@@ -394,7 +447,7 @@ def sort_songs(self, sort_key="index", reverse=False):
 
     # 映射排序键到歌曲属性
     key_mapping = {
-        "index": lambda x: x.get("index", 0),
+        "index": lambda x: x.get("original_index", x.get("index", 0)),  # 优先使用 original_index
         "name": lambda x: x.get("name", "").lower(),
         "artist": lambda x: x.get("artist", "").lower(),
         "album": lambda x: x.get("album", "").lower(),

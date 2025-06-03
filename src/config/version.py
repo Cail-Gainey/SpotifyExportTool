@@ -14,8 +14,8 @@ else:
 
 # 默认版本信息
 DEFAULT_VERSION_INFO = {
-    'version': '1.0.1',
-    'build_date': '2025-06-02',
+    'version': '1.1.0',
+    'build_date': '2025-06-03',
     'release_notes': '修复已知问题'
 }
 

@@ -50,7 +50,7 @@ class SongLoader(QThread):
     def run(self):
         """执行歌曲加载任务"""
         try:
-            logger.info(
+            logger.debug(
                 f"开始加载播放列表: {self.playlist_id}，强制刷新: {self.force_refresh}"
             )
             
@@ -61,7 +61,6 @@ class SongLoader(QThread):
 
             # 如果不是强制刷新，首先尝试从缓存加载
             if not self.force_refresh:
-                logger.info(f"尝试从缓存加载播放列表: {self.playlist_id}")
                 cached_tracks = self.cache_manager.get_cached_tracks(self.playlist_id)
                 if cached_tracks:
                     logger.info(
@@ -122,6 +121,125 @@ class SongLoader(QThread):
 
             logger.error(traceback.format_exc())
             self.load_error.emit(str(e))
+
+    def _process_track_data(self, track_item, total_tracks):
+        """
+        处理Spotify API返回的track数据，提取出需要的信息
+        
+        Args:
+            track_item: Spotify API返回的track数据项
+            total_tracks: 总歌曲数，用于处理最后一首歌曲的索引
+            
+        Returns:
+            dict: 处理后的track数据，包含id, name, album, artist等字段
+        """
+        try:
+            # 从track_item中提取track信息
+            track = track_item.get('track', {})
+            if not track:
+                # 如果没有track字段，尝试直接使用track_item
+                track = track_item
+                
+            # 提取基本信息
+            track_id = track.get('id', f"unknown_{hash(str(track))}")
+            track_name = track.get('name', '未知歌曲')
+            
+            # 提取专辑信息
+            album = track.get('album', {})
+            album_name = album.get('name', '未知专辑')
+            
+            # 提取艺术家信息
+            artists = track.get('artists', [])
+            artist_names = []
+            for artist in artists:
+                artist_names.append(artist.get('name', '未知艺术家'))
+            artist_name = ', '.join(artist_names) if artist_names else '未知艺术家'
+            
+            # 提取图片信息
+            album_images = album.get('images', [])
+            image_url = album_images[0].get('url') if album_images else ''
+            
+            # 获取当前项的索引
+            current_index = track_item.get('original_index', 0)
+            
+            # 如果索引为0，并且提供了总歌曲数，使用总歌曲数作为最后一首歌曲的索引
+            if current_index == 0 and total_tracks > 0:
+                current_index = total_tracks
+            
+            # 构造我们需要的数据结构
+            processed_track = {
+                'id': track_id,
+                'name': track_name,
+                'album': album_name,
+                'artist': artist_name,
+                'image_url': image_url,
+                'original_index': current_index,  # 使用计算后的索引
+                'raw_data': track  # 保留原始数据，以防后续需要
+            }
+            
+            return processed_track
+        except Exception as e:
+            logger.error(f"处理歌曲数据失败: {str(e)}")
+            # 返回一个默认的数据结构
+            return {
+                'id': f"error_{hash(str(track_item))}",
+                'name': '处理错误',
+                'album': '未知专辑',
+                'artist': '未知艺术家',
+                'image_url': '',
+                'original_index': 0
+            }
+
+    def load_tracks(self, playlist_id, force_refresh=False):
+        """
+        加载播放列表中的所有歌曲
+        
+        Args:
+            playlist_id: 播放列表ID
+            force_refresh: 是否强制刷新缓存
+        
+        Returns:
+            list: 处理后的歌曲列表
+        """
+        try:
+            logger.debug(f"开始加载播放列表: {playlist_id}，强制刷新: {force_refresh}")
+            
+            # 尝试从缓存加载
+            if not force_refresh:
+                cached_tracks = self.cache_manager.get_playlist_tracks(playlist_id)
+                if cached_tracks:
+                    logger.info(f"成功从缓存加载播放列表: {playlist_id}, 共{len(cached_tracks)}首歌曲")
+                    return cached_tracks
+            
+            # 从Spotify API获取歌曲
+            tracks = []
+            results = self.sp.playlist_tracks(playlist_id, limit=100)
+            total_tracks = results['total']
+            
+            # 处理第一批歌曲
+            for i, item in enumerate(results['items'], 1):
+                processed_track = self._process_track_data(item, total_tracks)
+                processed_track['original_index'] = i
+                tracks.append(processed_track)
+            
+            # 处理分页
+            while results['next']:
+                results = self.sp.next(results)
+                for i, item in enumerate(results['items'], len(tracks) + 1):
+                    processed_track = self._process_track_data(item, total_tracks)
+                    processed_track['original_index'] = i
+                    tracks.append(processed_track)
+            
+            # 缓存歌曲列表
+            self.cache_manager.cache_playlist_tracks(playlist_id, tracks)
+            
+            logger.info(f"成功加载播放列表: {playlist_id}, 共{len(tracks)}首歌曲")
+            return tracks
+        
+        except Exception as e:
+            logger.error(f"加载播放列表 {playlist_id} 失败: {str(e)}")
+            self.load_error.emit(str(e))
+            return []
 
 
 class ImageLoader(QThread):

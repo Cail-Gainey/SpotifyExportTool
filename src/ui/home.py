@@ -6,9 +6,18 @@ from PyQt5.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                             QStackedWidget)
 from PyQt5.QtCore import Qt, QTimer
 import os
+import sys
+
+# 定义 BASE_DIR
+if getattr(sys, 'frozen', False):
+    # 如果是打包后的可执行文件
+    BASE_DIR = os.path.dirname(sys.executable)
+else:
+    # 如果是直接运行脚本
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from PyQt5.QtGui import QIcon, QResizeEvent
 import spotipy
-import sys
 
 from src.ui.welcome_view import WelcomeView
 from src.ui.playlist_view import PlaylistView
@@ -38,19 +47,31 @@ class HomePage(QMainWindow):
             self.language_manager = LanguageManager()
             self.cache_manager = CacheManager()
             
+            # 添加 last_window_width 属性
+            self.last_window_width = 0
+            
+            # 初始化 playlist_view 属性
+            self.playlist_view = None
+            
             # 初始化HomePage界面
             logger.debug("初始化HomePage界面")
             self.init_ui()
             
+            # 尝试加载用户信息和播放列表
+            logger.debug("尝试加载用户信息和播放列表")
+            self.load_user_data()
+            
             # 清理过期缓存
             logger.debug("清理过期缓存")
-            self.cache_manager.clean_expired_cache()
+            if hasattr(self.cache_manager, 'clean_expired_cache'):
+                self.cache_manager.clean_expired_cache()
             
-            logger.info("HomePage初始化完成")
+            logger.debug("HomePage初始化完成")
         except Exception as e:
             logger.error(f"HomePage初始化失败: {str(e)}")
             import traceback
             traceback.print_exc()
+            self.show_loading_error(str(e))
             
     def update_window_title(self):
         """更新窗口标题"""
@@ -114,8 +135,8 @@ class HomePage(QMainWindow):
             content_layout.addWidget(self.sidebar)
             
             # 创建主视图区域
-            self.main_view_widget = QStackedWidget()
-            content_layout.addWidget(self.main_view_widget)
+            self.stacked_widget = QStackedWidget()
+            content_layout.addWidget(self.stacked_widget)
             
             # 添加内容布局到主布局
             main_layout.addLayout(content_layout)
@@ -123,7 +144,7 @@ class HomePage(QMainWindow):
             # 创建欢迎页面
             logger.debug("创建欢迎页面")
             self.welcome_view = WelcomeView(self.sp)
-            self.main_view_widget.addWidget(self.welcome_view)
+            self.stacked_widget.addWidget(self.welcome_view)
             
             # 连接各组件信号
             logger.debug("连接各组件信号")
@@ -133,9 +154,13 @@ class HomePage(QMainWindow):
             
             # 显示欢迎页
             logger.debug("显示欢迎页")
-            self.main_view_widget.setCurrentWidget(self.welcome_view)
+            self.stacked_widget.setCurrentWidget(self.welcome_view)
             
-            logger.info("HomePage布局初始化完成")
+            # 自动加载播放列表
+            logger.debug("自动加载播放列表")
+            self.sidebar.load_playlists()
+            
+            logger.debug("HomePage布局初始化完成")
         except Exception as e:
             logger.error(f"HomePage布局初始化失败: {str(e)}")
             import traceback
@@ -192,71 +217,153 @@ class HomePage(QMainWindow):
         self.show_home()
     
     def logout(self):
-        """登出并返回登录界面"""
+        """安全地登出并返回登录界面"""
         try:
-            # 删除token文件
-            token_path = os.path.join(self.base_dir, 'data', 'token.json')
-            if os.path.exists(token_path):
+            # 使用上下文管理器确保资源正确释放
+            from contextlib import suppress
+            
+            # 删除token文件，忽略可能的文件不存在错误
+            with suppress(FileNotFoundError):
+                token_path = os.path.join(self.base_dir, 'data', 'token.json')
                 os.remove(token_path)
             
             # 导入登录模块（在需要时导入，避免循环导入）
             from src.ui.login import LoginWindow
             
-            # 创建登录窗口
-            self.login_window = LoginWindow()
+            # 创建登录窗口并居中
+            login_window = LoginWindow()
+            self._center_window(login_window)
             
-            # 调整登录窗口位置到屏幕中央
-            from PyQt5.QtWidgets import QDesktopWidget
-            screen = QDesktopWidget().screenGeometry()
-            window_size = self.login_window.geometry()
-            x = (screen.width() - window_size.width()) // 2
-            y = (screen.height() - window_size.height()) // 2
-            self.login_window.move(x, y)
-            
-            # 显示登录窗口
-            self.login_window.show()
-            
-            # 关闭主窗口
+            # 显示登录窗口并关闭主窗口
+            login_window.show()
             self.close()
-            
+        
         except Exception as e:
-            logger.error(f"注销失败: {str(e)}")
-            from PyQt5.QtWidgets import QMessageBox
-            QMessageBox.warning(self, self.language_manager.get_text('common.error', '错误'),
-                               f"{self.language_manager.get_text('logout.failed', '注销失败')}: {str(e)}")
+            logger.error(f"注销失败: {e}")
+            self._show_logout_error(e)
+    
+    def _center_window(self, window):
+        """将窗口居中显示
+        :param window: 待居中的窗口
+        """
+        from PyQt5.QtWidgets import QDesktopWidget
+        screen = QDesktopWidget().screenGeometry()
+        window_size = window.geometry()
+        x = (screen.width() - window_size.width()) // 2
+        y = (screen.height() - window_size.height()) // 2
+        window.move(x, y)
+    
+    def _show_logout_error(self, error):
+        """显示注销错误
+        :param error: 错误对象
+        """
+        from PyQt5.QtWidgets import QMessageBox
+        QMessageBox.warning(
+            self, 
+            self.language_manager.get_text('common.error', '错误'),
+            f"{self.language_manager.get_text('logout.failed', '注销失败')}: {str(error)}"
+        )
     
     def show_playlist(self, playlist):
-        """显示播放列表页面
+        """显示播放列表页面，增加健壮性
         :param playlist: 播放列表数据
         """
-        # 检查是否已经在显示该播放列表
-        if hasattr(self, 'playlist_view') and self.playlist_view and \
-           hasattr(self.playlist_view, 'playlist_id') and \
-           self.playlist_view.playlist_id == playlist["id"]:
-            # 已经在显示该播放列表，触发刷新
-            logger.info(f"重新加载当前显示的播放列表: {playlist['name']}")
-            self.playlist_view.refresh_songs()
-            return
+        try:
+            # 验证输入数据
+            if not playlist or not isinstance(playlist, dict):
+                logger.warning("无效的播放列表数据")
+                return
+            
+            # 检查是否已经在显示该播放列表
+            current_playlist_id = None
+            if (hasattr(self, 'playlist_view') and 
+                self.playlist_view and 
+                hasattr(self.playlist_view, 'playlist_id')):
+                current_playlist_id = self.playlist_view.playlist_id
+            
+            # 如果当前已经显示的播放列表ID与要显示的播放列表ID相同，直接返回
+            if current_playlist_id == playlist.get("id"):
+                logger.debug(f"已经显示播放列表: {playlist.get('name', '未知')}")
+                return
+            
+            # 清除之前的内容
+            self.clear_content()
+            
+            # 创建播放列表视图
+            self.playlist_view = PlaylistView(
+                parent=self,
+                spotify_client=self.sp, 
+                playlist_id=playlist.get("id"),
+                playlist_name=playlist.get("name", "未命名播放列表"),
+                cache_manager=self.cache_manager,
+                locale_manager=self.language_manager
+            )
+            
+            # 添加并显示播放列表视图
+            self.stacked_widget.addWidget(self.playlist_view)
+            self.stacked_widget.setCurrentWidget(self.playlist_view)
+            
+            # 强制更新布局
+            self.playlist_view.update()
+            self.update()
         
-        # 清除之前的内容
-        self.clear_content()
-        
-        # 创建播放列表视图，传递语言管理器和缓存管理器
-        self.playlist_view = PlaylistView(
-            parent=self,
-            spotify_client=self.sp, 
-            playlist_id=playlist["id"],
-            playlist_name=playlist["name"],
-            cache_manager=self.cache_manager,
-            locale_manager=self.language_manager
-        )
-        self.stacked_widget.addWidget(self.playlist_view)
-        self.stacked_widget.setCurrentWidget(self.playlist_view)
+        except Exception as e:
+            logger.error(f"显示播放列表时发生错误: {e}")
+            import traceback
+            traceback.print_exc()
+            # 可以添加错误处理逻辑，例如显示错误提示
     
     def load_user_data(self):
-        """加载用户数据"""
-        # 加载侧边栏数据
-        self.sidebar_view.load_playlists()
+        """尝试加载用户信息和播放列表"""
+        try:
+            # 显示加载视图
+            loading_view = LoadingView(parent=self.stacked_widget)
+            self.stacked_widget.addWidget(loading_view)
+            self.stacked_widget.setCurrentWidget(loading_view)
+            
+            # 尝试获取用户信息
+            user_info = self.sp.current_user()
+            
+            # 缓存用户信息
+            self.sp.user_info = user_info
+            
+            # 尝试加载播放列表
+            self.sidebar.load_playlists()
+            
+            # 显示欢迎页
+            self.stacked_widget.removeWidget(loading_view)
+            loading_view.deleteLater()
+            self.stacked_widget.setCurrentWidget(self.welcome_view)
+        
+        except Exception as e:
+            logger.error(f"加载用户数据失败: {str(e)}")
+            self.show_loading_error(str(e))
+    
+    def show_loading_error(self, error_msg):
+        """显示加载错误页面"""
+        try:
+            # 移除可能存在的加载视图
+            for i in range(self.stacked_widget.count()):
+                widget = self.stacked_widget.widget(i)
+                if isinstance(widget, LoadingView):
+                    self.stacked_widget.removeWidget(widget)
+                    widget.deleteLater()
+            
+            # 创建错误视图
+            error_view = ErrorView(
+                error_type="loading", 
+                error_message=error_msg, 
+                parent=self.stacked_widget
+            )
+            
+            # 添加并显示错误视图
+            self.stacked_widget.addWidget(error_view)
+            self.stacked_widget.setCurrentWidget(error_view)
+        
+        except Exception as e:
+            logger.error(f"显示加载错误页面失败: {str(e)}")
+            import traceback
+            traceback.print_exc()
     
     def show_settings(self):
         """显示设置页面"""
@@ -301,28 +408,27 @@ class HomePage(QMainWindow):
             self.stacked_widget.setCurrentWidget(error_view)
     
     def resizeEvent(self, event: QResizeEvent):
-        """窗口大小变化事件"""
-        super().resizeEvent(event)
-        
-        # 检测窗口大小是否有明显变化
-        current_width = self.width()
-        current_height = self.height()
-        
-        # 如果窗口宽度变化超过5%，重新调整侧边栏和内容区域的比例
-        width_change_percent = abs(current_width - self.last_window_width) / self.last_window_width if self.last_window_width > 0 else 0
-        if width_change_percent > 0.05:
-            self.adjust_responsive_layout()
+        """窗口大小改变事件处理"""
+        try:
+            # 获取当前窗口宽度
+            current_width = self.width()
             
-        # 如果窗口大小变化，强制子控件重新布局
-        if abs(current_width - self.last_window_width) > 5 or abs(current_height - self.last_window_height) > 5:
-            # 更新当前显示的视图
-            current_widget = self.stacked_widget.currentWidget()
-            if current_widget:
-                current_widget.updateGeometry()
-                
-        # 更新存储的窗口大小
-        self.last_window_width = current_width
-        self.last_window_height = current_height
+            # 计算宽度变化百分比
+            width_change_percent = abs(current_width - self.last_window_width) / self.last_window_width if self.last_window_width > 0 else 0
+            
+            # 如果宽度变化超过5%，触发响应式布局调整
+            if width_change_percent > 0.05:
+                self.adjust_responsive_layout()
+            
+            # 更新最后的窗口宽度
+            self.last_window_width = current_width
+            
+            # 调用父类的 resizeEvent 方法
+            super().resizeEvent(event)
+        except Exception as e:
+            logger.error(f"窗口大小调整事件处理失败: {str(e)}")
+            import traceback
+            traceback.print_exc()
 
     def adjust_responsive_layout(self):
         """响应窗口大小变化，调整布局"""
@@ -409,3 +515,17 @@ class HomePage(QMainWindow):
             current_widget = self.stacked_widget.currentWidget()
             if hasattr(current_widget, 'update'):
                 current_widget.update()
+
+    def show_welcome_view(self):
+        """显示欢迎页面，兼容信号连接"""
+        self.show_welcome()
+
+    def show_settings_view(self):
+        """显示设置页面，兼容信号连接"""
+        self.show_settings()
+
+    def show_playlist_view(self, playlist):
+        """显示播放列表页面，兼容信号连接
+        :param playlist: 播放列表数据
+        """
+        self.show_playlist(playlist)

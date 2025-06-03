@@ -7,6 +7,7 @@ from PyQt5.QtWidgets import QWidget
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QTime
 from PyQt5.QtGui import QPixmap
 from src.utils.logger import logger
+from src.utils.thread_manager import thread_manager  # 引入线程管理器
 
 # 导入其他模块的功能
 from .thread_loaders import SongLoader, ImageLoader
@@ -131,12 +132,9 @@ class PlaylistView(QWidget):
         self.export_mode = False  # 是否处于导出模式
         self.width_factor = 1.0  # 宽度因子，用于响应式布局
 
-        # 活动线程列表
-        self.active_threads = []
-
-        # 限流相关
-        self.last_scroll_time = QTime.currentTime().msecsSinceStartOfDay()
-        self.scroll_throttle = 200  # 滚动限流时间(毫秒)
+        # 添加滚动相关属性
+        self.last_scroll_time = 0  # 上次滚动的时间
+        self.scroll_throttle = 100  # 滚动节流时间间隔（毫秒）
 
         # 导入导出相关函数 - 在初始化UI之前导入
         (
@@ -188,6 +186,15 @@ class PlaylistView(QWidget):
         Args:
             force_refresh: 是否强制刷新
         """
+        # 如果已经加载过这个播放列表，且歌曲列表不为空，则直接返回
+        if (not force_refresh and 
+            self.current_songs and 
+            len(self.current_songs) > 0):
+            logger.debug(f"播放列表 {self.playlist_name} 已加载，歌曲数量: {len(self.current_songs)}")
+            # 重新创建歌曲列表，确保UI正确显示
+            self.create_song_list(self.current_songs)
+            return
+
         if self.is_loading:
             logger.debug("已有播放列表加载任务在执行中，跳过")
             return
@@ -228,11 +235,8 @@ class PlaylistView(QWidget):
         self.song_loader.songs_loaded.connect(self.on_songs_loaded)
         self.song_loader.load_error.connect(self.on_load_error)
         
-        # 连接线程完成信号
-        self.song_loader.finished.connect(lambda: self.active_threads.remove(self.song_loader) if self.song_loader in self.active_threads else None)
-        
-        # 添加到活动线程列表
-        self.active_threads.append(self.song_loader)
+        # 使用线程管理器注册线程
+        thread_manager.register_thread(self.song_loader, 'playlist_loader')
 
         # 开始加载
         self.song_loader.start()
@@ -254,21 +258,26 @@ class PlaylistView(QWidget):
         # 保存歌曲列表
         self.current_songs = songs
 
-        # 添加索引
-        for i, song in enumerate(self.current_songs):
-            song["index"] = i + 1
-
         # 创建歌曲列表
-        self.create_song_list(songs, replace=True)
+        self.create_song_list(songs)
+
+        # 更新状态标签
+        if from_cache:
+            self.status_label.setText(self.get_text("playlist.loaded_from_cache", "从缓存加载"))
+        else:
+            self.status_label.setText(self.get_text("playlist.loaded", "加载完成"))
 
         # 加载播放列表封面
         self.load_playlist_image()
 
+        # 加载可见歌曲的图片
+        self.load_visible_song_images()
+
         # 重置加载状态
         self.is_loading = False
 
-        # 发射加载完成信号
-        self.loaded_signal.emit(True, "")
+        # 发送加载完成信号
+        self.loaded_signal.emit(True, self.playlist_name)
 
     def on_load_error(self, error):
         """加载错误回调
@@ -329,11 +338,8 @@ class PlaylistView(QWidget):
             )
             self.image_loader.image_loaded.connect(self.on_playlist_image_loaded)
             
-            # 连接线程完成信号
-            self.image_loader.finished.connect(lambda: self.active_threads.remove(self.image_loader) if self.image_loader in self.active_threads else None)
-            
-            # 添加到活动线程列表
-            self.active_threads.append(self.image_loader)
+            # 使用线程管理器注册线程
+            thread_manager.register_thread(self.image_loader, 'image_loader')
             
             self.image_loader.start()
         else:
@@ -387,11 +393,8 @@ class PlaylistView(QWidget):
         image_loader = ImageLoader(image_url, track_id, self.cache_manager)
         image_loader.image_loaded.connect(self.on_song_image_loaded)
         
-        # 连接线程完成信号
-        image_loader.finished.connect(lambda: self.active_threads.remove(image_loader) if image_loader in self.active_threads else None)
-        
-        # 添加到活动线程列表
-        self.active_threads.append(image_loader)
+        # 使用线程管理器注册线程
+        thread_manager.register_thread(image_loader, 'image_loader')
         
         image_loader.start()
 
@@ -412,7 +415,13 @@ class PlaylistView(QWidget):
         self.update_song_image(track_id, pixmap)
 
     def refresh_songs(self):
-        """刷新歌曲列表"""
+        """刷新当前播放列表的歌曲"""
+        # 如果正在加载，直接返回
+        if self.is_loading:
+            logger.debug("正在加载歌曲，跳过刷新")
+            return
+        
+        # 强制从API刷新
         self.load_playlist(force_refresh=True)
 
     def on_scroll(self, value):
@@ -421,18 +430,27 @@ class PlaylistView(QWidget):
         Args:
             value: 滚动条值
         """
-        # 限流处理
-        current_time = QTime.currentTime().msecsSinceStartOfDay()
-        if current_time - self.last_scroll_time < self.scroll_throttle:
-            return
+        try:
+            # 确保属性存在
+            if not hasattr(self, 'last_scroll_time'):
+                self.last_scroll_time = 0
+            if not hasattr(self, 'scroll_throttle'):
+                self.scroll_throttle = 100
 
-        self.last_scroll_time = current_time
+            # 限流处理
+            current_time = QTime.currentTime().msecsSinceStartOfDay()
+            if current_time - self.last_scroll_time < self.scroll_throttle:
+                return
 
-        # 加载可见的歌曲图片
-        self.load_visible_song_images()
+            self.last_scroll_time = current_time
 
-        # 检查是否需要加载更多歌曲
-        self.load_more_songs(value)
+            # 加载可见的歌曲图片
+            self.load_visible_song_images()
+
+            # 检查是否需要加载更多歌曲
+            self.load_more_songs(value)
+        except Exception as e:
+            logger.error(f"滚动事件处理失败: {str(e)}")
 
     def load_more_songs(self, scroll_value):
         """根据滚动位置加载更多歌曲
@@ -568,39 +586,19 @@ class PlaylistView(QWidget):
 
     def __del__(self):
         """析构函数，确保所有线程都安全停止"""
-        self._cleanup_threads()
-        
-    def _cleanup_threads(self):
-        """安全清理和退出所有活动线程"""
-        if hasattr(self, 'active_threads'):
-            # 复制线程列表，因为在迭代过程中可能会修改原列表
-            threads_to_stop = self.active_threads.copy()
-            
-            for thread in threads_to_stop:
-                try:
-                    if thread.isRunning():
-                        logger.debug(f"正在停止线程: {thread}")
-                        thread.quit()
-                        # 等待最多1秒钟
-                        if not thread.wait(1000):
-                            logger.warning(f"线程未能在1秒内停止: {thread}")
-                            # 如果不能优雅地退出，则终止线程
-                            thread.terminate()
-                            thread.wait()
-                except Exception as e:
-                    logger.error(f"停止线程时出错: {str(e)}")
-            
-            # 清空线程列表
-            self.active_threads.clear()
-            
+        # 使用线程管理器停止相关线程
+        thread_manager.stop_threads('playlist_loader')
+        thread_manager.stop_threads('image_loader')
+
     def closeEvent(self, event):
         """处理窗口关闭事件
 
         Args:
             event: 事件对象
         """
-        # 清理活动线程
-        self._cleanup_threads()
+        # 停止相关线程
+        thread_manager.stop_threads('playlist_loader')
+        thread_manager.stop_threads('image_loader')
         
         # 接受关闭事件
         event.accept()

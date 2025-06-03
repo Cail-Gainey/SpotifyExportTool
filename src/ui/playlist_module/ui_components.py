@@ -125,7 +125,7 @@ def init_ui(self):
     button_layout.addWidget(self.export_button)
 
     # 创建取消导出按钮
-    self.cancel_export_button = QPushButton(self.get_text("playlist.clear", "清空"))
+    self.cancel_export_button = QPushButton(self.get_text("playlist.cancel", "取消"))
     self.cancel_export_button.setCursor(Qt.PointingHandCursor)
     self.cancel_export_button.setStyleSheet(
         """
@@ -272,10 +272,10 @@ def init_ui(self):
     # 添加图片容器到顶部布局
     top_layout.addWidget(image_container)
 
-    # 创建搜索框
+    # 创建搜索容器
     search_container = QWidget()
     search_layout = QHBoxLayout(search_container)
-    search_layout.setContentsMargins(0, 0, 0, 0)
+    search_layout.setContentsMargins(30, 10, 30, 10)  # 增加上下边距，并与顶部容器保持一致的左右边距
     search_layout.setSpacing(10)
 
     # 创建搜索图标
@@ -771,7 +771,7 @@ def update_ui_texts(self):
         self.export_button.setText(self.get_text("playlist.export_button", "导出"))
         
     if hasattr(self, "cancel_export_button"):
-        self.cancel_export_button.setText(self.get_text("playlist.clear", "清空"))
+        self.cancel_export_button.setText(self.get_text("playlist.cancel", "取消"))
         
     if hasattr(self, "select_all_button"):
         self.select_all_button.setText(self.get_text("playlist.select_all", "全选"))

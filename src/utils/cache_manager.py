@@ -19,7 +19,7 @@ class CacheManager:
         base_dir = self.get_base_dir()
         
         # 缓存目录
-        self.cache_dir = os.path.join(base_dir, 'cache')  # 现在cache与data同级
+        self.cache_dir = os.path.join(base_dir, 'cache')
         self.playlists_cache_file = os.path.join(self.cache_dir, 'playlists.json')
         self.tracks_cache_dir = os.path.join(self.cache_dir, 'tracks')
         self.images_cache_dir = os.path.join(self.cache_dir, 'images')

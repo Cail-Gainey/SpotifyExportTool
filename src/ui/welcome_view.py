@@ -2,12 +2,14 @@
 欢迎页面视图
 """
 from PyQt5.QtWidgets import (QWidget, QLabel, QVBoxLayout, QScrollArea, QSizePolicy)
-from PyQt5.QtGui import QFont, QPixmap
+from PyQt5.QtGui import QFont, QPixmap, QPainter, QBrush, QImage
 from PyQt5.QtCore import Qt
 from datetime import datetime
 from src.utils.language_manager import LanguageManager
 from src.utils.logger import logger
 import os
+from src.utils.image_loader import ImageLoader
+from src.utils.cache_manager import CacheManager
 
 class WelcomeView(QWidget):
     def __init__(self, sp):
@@ -16,8 +18,9 @@ class WelcomeView(QWidget):
             super().__init__()
             self.sp = sp
             
-            # 初始化语言管理器
+            # 初始化语言管理器和缓存管理器
             self.language_manager = LanguageManager()
+            self.cache_manager = CacheManager()
             
             # 初始化UI元素
             self.welcome_label = None
@@ -33,9 +36,8 @@ class WelcomeView(QWidget):
             self.language_manager.language_changed.connect(self.update_ui_texts)
             
             # 加载用户信息并更新UI
-            logger.debug("加载用户信息")
             self.load_user_info()
-            logger.info("WelcomeView初始化完成")
+            logger.debug("WelcomeView初始化完成")
         except Exception as e:
             logger.error(f"WelcomeView初始化失败: {str(e)}")
             import traceback
@@ -167,52 +169,100 @@ class WelcomeView(QWidget):
         # 这个方法的存在确保在某些布局变更时，背景色会被重新绘制
     
     def load_user_info(self):
-        """加载用户信息并更新UI"""
+        """加载用户信息"""
         try:
-            logger.info("开始加载用户信息")
-            # 获取用户信息
-            user_info = self.sp.current_user()
-            self.user_name = user_info['display_name']
-            logger.info(f"加载到用户名: {self.user_name}")
+            logger.debug("开始加载用户信息")
             
-            # 更新UI文本
-            self.update_ui_texts()
-            logger.info("用户信息加载完成")
+            # 尝试从多个来源获取用户信息
+            user_info = None
             
+            # 首先尝试从Spotify客户端的user_info属性获取
+            if hasattr(self.sp, 'user_info'):
+                user_info = self.sp.user_info
+                logger.debug("从sp.user_info获取用户信息")
+            
+            # 如果user_info为None，尝试直接调用current_user()
+            if user_info is None:
+                try:
+                    user_info = self.sp.current_user()
+                    logger.debug("通过current_user()获取用户信息")
+                except Exception as current_user_error:
+                    logger.error(f"获取用户信息失败: {current_user_error}")
+            
+            # 检查用户信息是否有效
+            if user_info and isinstance(user_info, dict):
+                # 存储用户名
+                self.user_name = user_info.get('display_name', '未知用户')
+                logger.info(f"加载到用户名: {self.user_name}")
+                
+                # 更新欢迎文本
+                self._update_welcome_text()
+                
+                # 加载用户头像
+                if user_info.get('images'):
+                    image_url = user_info['images'][0]['url']
+                    logger.debug(f"开始加载用户头像: {image_url}")
+                    
+                    # 使用异步加载头像
+                    loader = ImageLoader(image_url, track_id='user_avatar', cache_manager=self.cache_manager)
+                    loader.image_loaded.connect(self.on_avatar_loaded)
+                    loader.load_failed.connect(self._on_avatar_load_failed)
+                    loader.start()
+                else:
+                    logger.warning("用户信息中没有头像")
+            else:
+                # 如果无法获取用户信息，显示默认文本
+                logger.error("无法获取有效的用户信息")
+                self.welcome_label.setText(self.language_manager.get_text('welcome.unknown_user', '未知用户'))
+                
+                # 尝试加载默认头像
+                self._load_default_avatar()
+        
         except Exception as e:
-            logger.error(f"加载用户信息失败: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            self.error_label = QLabel()
-            self.error_label.setStyleSheet("color: #b3b3b3;")
-            self.layout.addWidget(self.error_label)
-            self.update_ui_texts()
+            logger.error(f"加载用户信息时发生异常: {str(e)}")
+            self.welcome_label.setText(self.language_manager.get_text('welcome.unknown_user', '未知用户'))
+            self._load_default_avatar()
     
-    def update_ui_texts(self):
-        """更新UI文本"""
+    def _load_default_avatar(self):
+        """加载默认头像"""
+        default_avatar_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 
+            'assets', 
+            'default_avatar.png'
+        )
+        
+        if os.path.exists(default_avatar_path):
+            logger.debug(f"加载默认头像: {default_avatar_path}")
+            avatar_pixmap = QPixmap(default_avatar_path)
+            avatar_pixmap = avatar_pixmap.scaled(120, 120, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.on_avatar_loaded(avatar_pixmap.toImage())
+        else:
+            logger.error(f"默认头像文件不存在: {default_avatar_path}")
+    
+    def _update_welcome_text(self):
+        """更新欢迎文本，添加更多个性化信息"""
         try:
-            if self.error_label:
-                self.error_label.setText(self.language_manager.get_text('home.loading_failed', '加载失败，请检查网络连接'))
-                return
-            
             # 获取当前时间
             hour = datetime.now().hour
+            
+            # 根据时间选择问候语
             if 5 <= hour < 12:
                 greeting_key = 'home.good_morning'
             elif 12 <= hour < 18:
                 greeting_key = 'home.good_afternoon'
             else:
                 greeting_key = 'home.good_evening'
-                
+            
+            # 获取问候语
             greeting = self.language_manager.get_text(greeting_key)
             
-            # 更新欢迎文本
-            if hasattr(self, 'user_name'):
-                self.welcome_label.setText(f"{greeting}，{self.user_name}")
-            else:
-                self.welcome_label.setText(greeting)
+            # 组合欢迎文本
+            welcome_text = f"{greeting}，{self.user_name}"
             
-            # 更新使用说明
+            # 设置欢迎标签文本
+            self.welcome_label.setText(welcome_text)
+            
+            # 更新其他消息标签
             message_keys = [
                 'home.welcome_msg',
                 'home.instruction_1',
@@ -225,7 +275,66 @@ class WelcomeView(QWidget):
                     self.message_labels[i].setText(self.language_manager.get_text(key))
             
             # 更新Logo文本
-            self.logo_label.setText(self.language_manager.get_text('topbar.app_name', 'SpotifyExport'))
-            
+            if hasattr(self, 'logo_label'):
+                self.logo_label.setText(self.language_manager.get_text('topbar.app_name', 'SpotifyExport'))
+        
         except Exception as e:
-            logger.error(f"更新欢迎页面文本失败: {str(e)}") 
+            logger.error(f"更新欢迎页面文本失败: {str(e)}")
+            # 如果出错，至少显示用户名
+            if hasattr(self, 'user_name'):
+                self.welcome_label.setText(self.user_name)
+    
+    def _on_avatar_load_failed(self, url):
+        """处理头像加载失败的情况"""
+        logger.warning(f"用户头像加载失败: {url}")
+        
+        # 尝试加载默认头像
+        self._load_default_avatar()
+    
+    def update_ui_texts(self):
+        """更新UI文本"""
+        try:
+            # 如果已经有用户名，重新更新欢迎文本
+            if hasattr(self, 'user_name'):
+                self._update_welcome_text()
+            
+            # 更新Logo文本
+            if hasattr(self, 'logo_label'):
+                self.logo_label.setText(self.language_manager.get_text('topbar.app_name', 'SpotifyExport'))
+        
+        except Exception as e:
+            logger.error(f"更新欢迎页面文本失败: {str(e)}")
+    
+    def on_avatar_loaded(self, image):
+        """头像加载完成回调"""
+        try:
+            if image is None or (hasattr(image, 'isNull') and image.isNull()):
+                logger.warning("用户头像加载失败")
+                return
+            
+            # 处理不同类型的图像输入
+            if isinstance(image, QImage):
+                pixmap = QPixmap.fromImage(image)
+            elif isinstance(image, QPixmap):
+                pixmap = image
+            else:
+                logger.warning(f"未知的图像类型: {type(image)}")
+                return
+            
+            # 缩放头像到合适尺寸
+            scaled_pixmap = pixmap.scaled(
+                120, 120, 
+                Qt.KeepAspectRatio, 
+                Qt.SmoothTransformation
+            )
+            
+            logger.debug("用户头像加载成功")
+            
+            # 更新欢迎页面的头像显示
+            if hasattr(self, 'logo_label'):
+                # 如果有logo标签，可以在这里进行进一步处理
+                pass
+        except Exception as e:
+            logger.error(f"处理用户头像时发生错误: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc()) 

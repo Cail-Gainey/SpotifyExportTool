@@ -7,7 +7,7 @@ from PyQt5.QtGui import QFont
 from PyQt5.QtCore import Qt
 from src.utils.cache_manager import CacheManager
 from src.utils.language_manager import LanguageManager
-from src.utils.logger import logger
+from src.utils.logger import logger, set_log_level
 import os
 from PyQt5.QtCore import QSettings, QEvent
 from PyQt5.QtWidgets import QApplication
@@ -147,18 +147,23 @@ class SettingsView(QWidget):
         
     def init_ui(self):
         """初始化UI"""
-        # 设置背景颜色
-        self.setStyleSheet("background-color: #040404;")
+        # 设置背景颜色和边框
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #040404;
+                border: none;
+            }
+        """)
         
         # 创建外层布局
         outer_layout = QVBoxLayout(self)
-        outer_layout.setContentsMargins(5, 5, 5, 5)  # 进一步减小外部边距
+        outer_layout.setContentsMargins(0, 0, 0, 0)  # 完全移除外部边距
         outer_layout.setSpacing(0)
         
         # 创建滚动区域
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
-        scroll_area.setFrameShape(QFrame.NoFrame)
+        scroll_area.setFrameShape(QFrame.NoFrame)  # 确保无边框
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll_area.setStyleSheet("""
             QScrollArea {
@@ -169,6 +174,7 @@ class SettingsView(QWidget):
                 background-color: #121212;
                 width: 8px;
                 margin: 0px;
+                border: none;
             }
             QScrollBar::handle:vertical {
                 background-color: #535353;
@@ -177,19 +183,26 @@ class SettingsView(QWidget):
             }
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
                 height: 0px;
+                border: none;
             }
             QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
                 background: none;
+                border: none;
             }
         """)
         
         # 创建内容容器
         content_widget = QWidget()
-        content_widget.setStyleSheet("background-color: #040404;")
+        content_widget.setStyleSheet("""
+            QWidget {
+                background-color: #040404;
+                border: none;
+            }
+        """)
         
         # 创建内容布局
         main_layout = QVBoxLayout(content_widget)
-        main_layout.setContentsMargins(10, 10, 10, 10)  # 进一步减小内部边距
+        main_layout.setContentsMargins(10, 10, 10, 10)  # 保持内部边距
         main_layout.setSpacing(8)  # 减小组件间距
         
         # 定义通用的布局创建函数
@@ -675,31 +688,117 @@ class SettingsView(QWidget):
     def clear_cache(self):
         """清除缓存"""
         try:
-            reply = QMessageBox.question(
-                self, 
-                self.language_manager.get_text("settings.cache.confirm"), 
-                self.language_manager.get_text("settings.cache.confirm_msg"),
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
-            )
+            # 创建自定义样式的消息框
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle(self.language_manager.get_text("settings.cache.confirm"))
+            msg_box.setText(self.language_manager.get_text("settings.cache.confirm_msg"))
+            msg_box.setIcon(QMessageBox.Question)
             
-            if reply == QMessageBox.Yes:
+            # 设置自定义样式表
+            msg_box.setStyleSheet("""
+                QMessageBox {
+                    background-color: #040404;
+                    color: white;
+                    border: 1px solid #282828;
+                }
+                QMessageBox QLabel {
+                    color: #b3b3b3;
+                    font-size: 14px;
+                }
+                QMessageBox QPushButton {
+                    background-color: #1DB954;
+                    color: white;
+                    min-width: 80px;
+                    padding: 5px;
+                    border-radius: 4px;
+                    border: none;
+                }
+                QMessageBox QPushButton:hover {
+                    background-color: #1ED760;
+                }
+                QMessageBox QPushButton:pressed {
+                    background-color: #169B42;
+                }
+                QMessageBox QFrame {
+                    background-color: #040404;
+                    border: none;
+                }
+            """)
+            
+            # 添加按钮
+            yes_btn = msg_box.addButton(self.language_manager.get_text("common.yes"), QMessageBox.YesRole)
+            no_btn = msg_box.addButton(self.language_manager.get_text("common.no"), QMessageBox.NoRole)
+            
+            # 显示消息框并等待用户响应
+            msg_box.exec_()
+            
+            if msg_box.clickedButton() == yes_btn:
                 self.cache_manager.clear_all_cache()
-                QMessageBox.information(
-                    self, 
-                    self.language_manager.get_text("common.success"),
-                    self.language_manager.get_text("settings.cache.success")
-                )
+                
+                # 成功消息框
+                success_box = QMessageBox(self)
+                success_box.setWindowTitle(self.language_manager.get_text("common.success"))
+                success_box.setText(self.language_manager.get_text("settings.cache.success"))
+                success_box.setIcon(QMessageBox.Information)
+                success_box.setStyleSheet("""
+                    QMessageBox {
+                        background-color: #040404;
+                        color: white;
+                        border: 1px solid #282828;
+                    }
+                    QMessageBox QLabel {
+                        color: #b3b3b3;
+                        font-size: 14px;
+                    }
+                    QMessageBox QPushButton {
+                        background-color: #1DB954;
+                        color: white;
+                        min-width: 80px;
+                        padding: 5px;
+                        border-radius: 4px;
+                        border: none;
+                    }
+                    QMessageBox QFrame {
+                        background-color: #040404;
+                        border: none;
+                    }
+                """)
+                success_box.exec_()
+                
                 # 刷新缓存大小显示
                 total_size = self.get_cache_size()
                 size_str = self.format_size(total_size)
                 self.cache_size_label.setText(self.language_manager.get_text("settings.cache.size").format(size_str))
         except Exception as e:
-            QMessageBox.critical(
-                self, 
-                self.language_manager.get_text("common.error"),
-                self.language_manager.get_text("settings.cache.error").format(str(e))
-            )
+            # 错误消息框
+            error_box = QMessageBox(self)
+            error_box.setWindowTitle(self.language_manager.get_text("common.error"))
+            error_box.setText(self.language_manager.get_text("settings.cache.error").format(str(e)))
+            error_box.setIcon(QMessageBox.Critical)
+            error_box.setStyleSheet("""
+                QMessageBox {
+                    background-color: #040404;
+                    color: white;
+                    border: 1px solid #282828;
+                }
+                QMessageBox QLabel {
+                    color: #b3b3b3;
+                    font-size: 14px;
+                }
+                QMessageBox QPushButton {
+                    background-color: #E91429;
+                    color: white;
+                    min-width: 80px;
+                    padding: 5px;
+                    border-radius: 4px;
+                    border: none;
+                }
+                QMessageBox QFrame {
+                    background-color: #040404;
+                    border: none;
+                }
+            """)
+            error_box.exec_()
     
     def on_export_format_changed(self, index):
         """处理导出格式变更"""
@@ -756,16 +855,12 @@ class SettingsView(QWidget):
                 logger.info(f"设置日志级别为: {log_level}")
                 # 保存设置到user_settings.json
                 settings.set_setting("log_level", log_level)
-                
                 # 同时也保存到QSettings以保持兼容性
                 qt_settings = QSettings()
                 qt_settings.setValue("log/level", log_level)
-                
-                # 更新日志级别
-                if logger.set_level(log_level):
-                    logger.info(f"日志级别已更新为: {log_level}")
-                else:
-                    logger.warning(f"更新日志级别失败: {log_level}")
+                # 动态切换日志级别
+                set_log_level(log_level)
+                logger.info(f"日志级别已更新为: {log_level}")
             except Exception as e:
                 logger.error(f"设置日志级别失败: {str(e)}")
                 QMessageBox.warning(

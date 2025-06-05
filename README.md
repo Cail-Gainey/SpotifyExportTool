@@ -206,7 +206,7 @@ SpotifyExportTool/
 如有问题或建议，请通过以下方式联系我们：
 
 - 在GitHub上提交[Issue](https://github.com/Cail-Gainey/SpotifyExportTool/issues)
-- 发送电子邮件至：[您的邮箱地址]
+- 发送电子邮件至：[cailgainey@foxmail.com]
 
 ---
 
